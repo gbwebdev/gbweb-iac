@@ -31,12 +31,125 @@ log_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
-# Check if GPG is available
+# Check if GPG is available and configured
 check_gpg() {
     if ! command -v gpg &> /dev/null; then
         log_error "GPG is not installed. Please install gnupg."
         exit 1
     fi
+    
+    # Start GPG agent if not running
+    if ! gpg-agent --daemon &>/dev/null; then
+        log_info "Starting GPG agent..."
+        eval $(gpg-agent --daemon)
+    fi
+}
+
+# Get or create passphrase file
+get_or_create_passphrase() {
+    local passphrase_file="$PROJECT_ROOT/.terraform-state-passphrase"
+    
+    if [[ ! -f "$passphrase_file" ]]; then
+        log_info "No passphrase file found. Creating new secure passphrase..."
+        
+        # Generate a strong random passphrase
+        if command -v openssl &> /dev/null; then
+            openssl rand -base64 32 > "$passphrase_file"
+        elif command -v head &> /dev/null && [[ -c /dev/urandom ]]; then
+            head -c 24 /dev/urandom | base64 > "$passphrase_file"
+        else
+            log_error "Cannot generate secure passphrase. Please install openssl or ensure /dev/urandom is available."
+            exit 1
+        fi
+        
+        chmod 600 "$passphrase_file"
+        log_success "Generated secure passphrase and saved to $passphrase_file"
+        log_warning "⚠️  IMPORTANT: This file contains your encryption passphrase!"
+        log_warning "⚠️  Make sure it's added to .gitignore and backup it securely!"
+        
+        # Check if .gitignore exists and add the passphrase file
+        local gitignore_file="$PROJECT_ROOT/.gitignore"
+        if [[ -f "$gitignore_file" ]]; then
+            if ! grep -q ".terraform-state-passphrase" "$gitignore_file"; then
+                echo "" >> "$gitignore_file"
+                echo "# Terraform state encryption passphrase" >> "$gitignore_file"
+                echo ".terraform-state-passphrase" >> "$gitignore_file"
+                log_info "Added .terraform-state-passphrase to .gitignore"
+            fi
+        else
+            log_warning "No .gitignore found. Please manually add .terraform-state-passphrase to your .gitignore!"
+        fi
+    fi
+    
+    if [[ ! -r "$passphrase_file" ]]; then
+        log_error "Cannot read passphrase file: $passphrase_file"
+        exit 1
+    fi
+    
+    TERRAFORM_PASSPHRASE=$(cat "$passphrase_file")
+    if [[ -z "$TERRAFORM_PASSPHRASE" ]]; then
+        log_error "Passphrase file is empty: $passphrase_file"
+        exit 1
+    fi
+}
+
+# Get or create GPG key for terraform state encryption
+get_gpg_key() {
+    local key_id="terraform-state@$(hostname)"
+    local existing_key=$(gpg --list-secret-keys --with-colons | grep "uid" | grep "$key_id" | head -1)
+    
+    if [[ -z "$existing_key" ]]; then
+        log_info "No GPG key found for Terraform state encryption."
+        log_info "Creating new GPG key: $key_id"
+        
+        # Get the passphrase
+        get_or_create_passphrase
+        
+        # Create GPG key configuration with the passphrase
+        cat > /tmp/gpg-key-config <<EOF
+%echo Generating Terraform state encryption key
+Key-Type: RSA
+Key-Length: 4096
+Subkey-Type: RSA
+Subkey-Length: 4096
+Name-Real: Terraform State
+Name-Email: $key_id
+Expire-Date: 0
+Passphrase: $TERRAFORM_PASSPHRASE
+%commit
+%echo Done
+EOF
+        
+        if gpg --batch --generate-key /tmp/gpg-key-config; then
+            # Securely remove the temporary file
+            shred -vfz -n 3 /tmp/gpg-key-config 2>/dev/null || rm -f /tmp/gpg-key-config
+            log_success "Created new GPG key for Terraform state encryption"
+        else
+            # Securely remove the temporary file
+            shred -vfz -n 3 /tmp/gpg-key-config 2>/dev/null || rm -f /tmp/gpg-key-config
+            log_error "Failed to create GPG key"
+            exit 1
+        fi
+    else
+        # Key exists, just get the passphrase for later use
+        get_or_create_passphrase
+    fi
+    
+    # Get the key ID - search for our terraform-state key
+    GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: -v email="terraform-state@$(hostname)" '
+        /^sec/ { key_id = $5 }
+        /^uid/ && $10 ~ email { print key_id; exit }
+    ')
+    
+    if [[ -z "$GPG_KEY_ID" ]]; then
+        log_error "Could not find or create GPG key for Terraform state encryption"
+        log_info "Debug: Searching for key with email: terraform-state@$(hostname)"
+        log_info "Available keys:"
+        gpg --list-secret-keys --with-colons | grep -E "^(sec|uid)" | head -10
+        exit 1
+    fi
+    
+    log_info "Using GPG key: $GPG_KEY_ID"
 }
 
 # Find all terraform state files
@@ -84,8 +197,8 @@ encrypt_state_file() {
     
     log_info "Encrypting $(basename "$state_file")..."
     
-    # Encrypt the file
-    if gpg --symmetric --cipher-algo AES256 --compress-algo 1 --quiet --batch --yes --output "$encrypted_file" "$state_file"; then
+    # Encrypt the file using asymmetric encryption
+    if gpg --trust-model always --encrypt --armor --recipient "$GPG_KEY_ID" --output "$encrypted_file" "$state_file"; then
         log_success "Encrypted $(basename "$state_file") → $(basename "$encrypted_file")"
         return 0
     else
@@ -112,7 +225,7 @@ decrypt_state_file() {
             log_info "Decrypting to conflict file: $(basename "$conflict_file")"
             
             # Decrypt to conflict file
-            if gpg --quiet --batch --yes --decrypt "$encrypted_file" > "$conflict_file"; then
+            if gpg --trust-model always --decrypt "$encrypted_file" > "$conflict_file"; then
                 log_warning "⚠️  CONFLICT DETECTED!"
                 log_warning "Original file: $(basename "$state_file")"
                 log_warning "Decrypted file: $(basename "$conflict_file")"
@@ -134,7 +247,7 @@ decrypt_state_file() {
     log_info "Decrypting $(basename "$encrypted_file")..."
     
     # Decrypt the file
-    if gpg --quiet --batch --yes --decrypt "$encrypted_file" > "$state_file"; then
+    if gpg --trust-model always --decrypt "$encrypted_file" > "$state_file"; then
         log_success "Decrypted $(basename "$encrypted_file") → $(basename "$state_file")"
         return 0
     else
@@ -191,8 +304,8 @@ encrypt_state_file_force() {
     
     log_info "Encrypting $(basename "$state_file")..."
     
-    # Encrypt the file
-    if gpg --symmetric --cipher-algo AES256 --compress-algo 1 --quiet --batch --yes --output "$encrypted_file" "$state_file"; then
+    # Encrypt the file using asymmetric encryption
+    if gpg --trust-model always --encrypt --armor --recipient "$GPG_KEY_ID" --output "$encrypted_file" "$state_file"; then
         log_success "Encrypted $(basename "$state_file") → $(basename "$encrypted_file")"
         return 0
     else
@@ -261,8 +374,10 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  encrypt  - Encrypt all .tfstate files to .tfstate.gpg"
+    echo "           - Uses asymmetric GPG encryption with dedicated key"
     echo "           - Asks for confirmation if encrypted file is newer"
     echo "  decrypt  - Decrypt all .tfstate.gpg files to .tfstate"
+    echo "           - Uses asymmetric GPG decryption"
     echo "           - If plaintext file is newer, creates .conflict file instead"
     echo "  cleanup  - Remove plaintext .tfstate files (keep encrypted)"
     echo "  check    - Check if all state files have encrypted versions"
@@ -276,6 +391,18 @@ usage() {
     echo "  $0 decrypt          # After pulling from git"
     echo "  $0 cleanup          # Remove plaintext versions safely"
     echo ""
+    echo "GPG Configuration:"
+    echo "  - First run will create a dedicated GPG key for Terraform state encryption"
+    echo "  - Passphrase is stored in .terraform-state-passphrase (auto-generated)"
+    echo "  - Uses asymmetric encryption with secure passphrase from file"
+    echo "  - GPG agent caches your key passphrase for the session"
+    echo "  - Key ID format: terraform-state@\$(hostname)"
+    echo ""
+    echo "Security Notes:"
+    echo "  - Passphrase file (.terraform-state-passphrase) is automatically added to .gitignore"
+    echo "  - Make sure to backup the passphrase file securely (outside of git)"
+    echo "  - File permissions are set to 600 (owner read/write only)"
+    echo ""
     echo "Conflict Resolution:"
     echo "  - When encrypting: if encrypted file is newer, asks for confirmation"
     echo "  - When decrypting: if plaintext file is newer, creates .conflict file"
@@ -285,6 +412,7 @@ usage() {
 # Main script logic
 main() {
     check_gpg
+    get_gpg_key
     
     local command="${1:-}"
     local flag="${2:-}"

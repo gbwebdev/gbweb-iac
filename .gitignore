@@ -1,0 +1,3 @@
+# Terraform state encryption passphrase
+.terraform-state-passphrase
+.terraform-state-passphrase.backup.*

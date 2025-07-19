@@ -68,3 +68,8 @@ output "floating_ip_summary" {
     secondary_ipv6 = var.enable_secondary_ipv6 ? hcloud_floating_ip.secondary_ipv6[0].ip_address : "disabled"
   }
 }
+
+output "fqdn" {
+  description = "Fully qualified domain name of the server"
+  value       = "${var.server_name}.${var.domain}"
+}

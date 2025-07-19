@@ -1,0 +1,51 @@
+# Root Terraform configuration
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.45"
+    }
+  }
+}
+
+# Configure the Hetzner Cloud Provider
+provider "hcloud" {
+  token = var.hetzner_token
+}
+
+# Local values for workspace-aware naming
+locals {
+  workspace_suffix = (terraform.workspace == "default" || terraform.workspace == "production") ? "" : "-${terraform.workspace}"
+  server_name_with_workspace = "${var.hetzner_server_name}${local.workspace_suffix}"
+  
+}
+
+# Hetzner Cloud VPS Module
+module "hetzner" {
+  source = "./modules/hetzner"
+
+  # Pass variables to the module
+  project_name        = var.project_name
+  server_name         = local.server_name_with_workspace  # Workspace-aware naming
+  domain              = var.domain
+  server_image        = var.hetzner_server_image
+  server_type         = var.hetzner_server_type
+  server_location     = var.hetzner_server_location
+  admin_username      = var.admin_username
+  ssh_public_keys     = var.ssh_public_keys
+  ssh_key_names       = var.ssh_key_names
+  environment         = var.environment
+  data_volume_size    = var.hetzner_data_volume_size
+  ssh_allowed_ips     = var.ssh_allowed_ips
+  ssh_port            = var.ssh_port
+  enable_secondary_ipv4 = var.hetzner_enable_secondary_ipv4
+  enable_secondary_ipv6 = var.hetzner_enable_secondary_ipv6
+}
+
+
+# module "cloudflare" {
+#   source = "./modules/cloudflare"
+#   # ... variables
+# }
+

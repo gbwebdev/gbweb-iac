@@ -103,3 +103,17 @@ variable "hetzner_enable_secondary_ipv6" {
   type        = bool
   default     = false
 }
+
+# Cloudflare specific variables
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token for managing DNS and other services"
+  type        = string
+  sensitive   = true
+}
+
+# Cloudflare specific variables
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID for managing DNS and other services"
+  type        = string
+  sensitive   = true
+}

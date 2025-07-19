@@ -6,12 +6,21 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.45"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.7"
+    }
   }
 }
 
 # Configure the Hetzner Cloud Provider
 provider "hcloud" {
   token = var.hetzner_token
+}
+
+# Configure the Cloudflare Provider
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token  
 }
 
 # Local values for workspace-aware naming
@@ -44,8 +53,11 @@ module "hetzner" {
 }
 
 
-# module "cloudflare" {
-#   source = "./modules/cloudflare"
-#   # ... variables
-# }
+module "cloudflare" {
+  source = "./modules/cloudflare"
+  account_id = var.cloudflare_account_id
+  # Pass Hetzner module outputs
+  hetzner_server_name = module.hetzner.server_name
+  hetzner_server_ipv4 = module.hetzner.primary_ipv4
+}
 

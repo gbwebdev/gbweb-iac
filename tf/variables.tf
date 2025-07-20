@@ -54,6 +54,32 @@
     default     = []
     }
 
+
+    variable "home_ipv4" {
+      description = "Home IPv4 - this is secret and proxied by Cloudflare"
+      type        = string
+      sensitive   = true
+    }
+
+    variable "home_ipv6_range" {
+      description = "Home IPv6 range - this is secret and used for firewalling"
+      type        = string
+      sensitive   = true
+    }
+
+variable "home_server_ipv6" {
+  description = "Home IPv6 - this is secret and proxied by Cloudflare"
+  type        = string
+  sensitive   = true
+}
+
+variable "extra_trusted_cidrs" {
+  description = "Additional trusted CIDR blocks (work, friends, etc.)"
+  type        = list(string)
+  default     = []
+  sensitive   = true
+}
+
 # Hetzner Cloud specific variables
 
 variable "hetzner_token" {

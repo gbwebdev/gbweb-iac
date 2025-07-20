@@ -15,4 +15,22 @@ variable "hetzner_server_ipv4" {
   type        = string
 }
 
+variable "home_ipv4" {
+  description = "Home IPv4 - this is secret and proxied by Cloudflare"
+  type        = string
+  sensitive   = true
+}
+
+variable "home_server_ipv6" {
+  description = "Home server IPv6 - this is secret and proxied by Cloudflare"
+  type        = string
+  sensitive   = true
+}
+
+variable "trusted_cidrs" {
+  description = "List of trusted CIDR blocks for security"
+  type        = list(string)
+  sensitive   = true
+}
+
 # Add more variables as needed for Cloudflare configuration

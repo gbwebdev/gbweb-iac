@@ -1,3 +1,6 @@
 # Terraform state encryption passphrase
 .terraform-state-passphrase
 .terraform-state-passphrase.backup.*
+.vault-password-file
+
+venv/

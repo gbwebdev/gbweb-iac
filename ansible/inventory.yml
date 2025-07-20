@@ -1,0 +1,26 @@
+---
+# Simple Ansible Inventory for Hetzner VPS
+# Static configuration using FQDN
+
+all:
+  children:
+    hetzner:
+      hosts:
+        ha-server:
+          ansible_host: ha-server.gbweb.fr
+          ansible_port: "{{ ssh_port }}"
+          ansible_user: ansible
+          ansible_ssh_private_key_file: ~/.ssh/id_rsa
+          
+          # Server details
+          server_name: ha-server
+          domain: gbweb.fr
+          environment: production
+
+  vars:
+    # SSH settings
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    ansible_timeout: 30
+    
+    # SSH port (define this as a secret variable)
+    # ssh_port: 22  # Default - override with vault or extra vars

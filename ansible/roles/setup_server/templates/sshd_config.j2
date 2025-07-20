@@ -1,0 +1,6 @@
+Port {{ ssh_port | default('22') }}
+AddressFamily inet
+PermitRootLogin no
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+AllowUsers ansible{% if admin_username is defined %} {{ admin_username }}{% endif %}

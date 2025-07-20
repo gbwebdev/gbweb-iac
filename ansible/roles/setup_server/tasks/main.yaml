@@ -1,0 +1,182 @@
+---
+# Ansible tasks to enforce cloud-init configuration
+# This ensures the server configuration matches what was set up during cloud-init
+
+- name: Set timezone to Europe/Paris
+  ansible.builtin.timezone:
+    name: Europe/Paris
+  become: true
+
+- name: Update package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: dist
+  become: true
+
+- name: Install essential packages
+  ansible.builtin.apt:
+    name: "{{ essential_packages }}"
+    state: present
+  become: true
+
+- name: Check if /dev/sdb exists
+  ansible.builtin.stat:
+    path: /dev/sdb
+  register: sdb_exists
+
+- name: Set up disk partition on /dev/sdb
+  ansible.builtin.parted:
+    device: /dev/sdb
+    number: 1
+    state: present
+    part_type: primary
+    fs_type: ext4
+  become: true
+  when: sdb_exists.stat.exists
+
+- name: Create ext4 filesystem on /dev/sdb1
+  ansible.builtin.filesystem:
+    fstype: ext4
+    dev: /dev/sdb1
+    opts: -L data
+  become: true
+  when: sdb_exists.stat.exists
+
+- name: Create /data mount point
+  ansible.builtin.file:
+    path: /data
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Mount /data partition
+  ansible.builtin.mount:
+    path: /data
+    src: /dev/sdb1
+    fstype: ext4
+    opts: defaults,noatime
+    dump: 0
+    passno: 2
+    state: mounted
+  become: true
+  when: sdb_exists.stat.exists
+
+- name: Ensure ansible user exists
+  ansible.builtin.user:
+    name: ansible
+    comment: "Ansible automation account"
+    groups: sudo
+    shell: /bin/bash
+    state: present
+  become: true
+
+- name: Add ansible user to sudoers (NOPASSWD)
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers.d/ansible
+    line: "ansible ALL=(ALL) NOPASSWD:ALL"
+    create: true
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  become: true
+
+- name: Set up authorized keys for ansible user
+  ansible.posix.authorized_key:
+    user: ansible
+    key: "{{ ansible_ssh_public_keys | join('\n') }}"
+    state: present
+  become: true
+  when: ansible_ssh_public_keys is defined
+
+- name: Ensure admin user exists
+  ansible.builtin.user:
+    name: "{{ admin_username }}"
+    comment: "Primary administrator"
+    groups: sudo
+    shell: /bin/bash
+    state: present
+  become: true
+  when: admin_username is defined
+
+- name: Add admin user to sudoers (NOPASSWD)
+  ansible.builtin.lineinfile:
+    path: "/etc/sudoers.d/{{ admin_username }}"
+    line: "{{ admin_username }} ALL=(ALL) NOPASSWD:ALL"
+    create: true
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  become: true
+  when: admin_username is defined
+
+- name: Set up authorized keys for admin user
+  ansible.posix.authorized_key:
+    user: "{{ admin_username }}"
+    key: "{{ admin_ssh_public_keys | join('\n') }}"
+    state: present
+  become: true
+  when: admin_username is defined and admin_ssh_public_keys is defined
+
+- name: Configure SSH hardening
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config.d/90-ansible.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: restart ssh
+
+- name: Configure Fail2Ban for custom SSH port
+  ansible.builtin.template:
+    src: fail2ban_ssh.j2
+    dest: /etc/fail2ban/jail.d/ssh.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: restart fail2ban
+
+- name: Reset UFW to defaults
+  community.general.ufw:
+    state: reset
+  become: true
+
+- name: Set UFW default policies
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  become: true
+  loop:
+    - { direction: 'incoming', policy: 'deny' }
+    - { direction: 'outgoing', policy: 'allow' }
+
+- name: Allow SSH on custom port
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port | default('22') }}"
+    proto: tcp
+    comment: 'SSH (custom port)'
+  become: true
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+  become: true
+
+- name: Ensure SSH service is running and enabled
+  ansible.builtin.systemd:
+    name: ssh
+    state: started
+    enabled: true
+  become: true
+
+- name: Ensure Fail2Ban service is running and enabled
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: started
+    enabled: true
+  become: true

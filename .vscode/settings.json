@@ -1,0 +1,4 @@
+{
+    "ansible.python.interpreterPath": "/home/guillaume/workspace/gbweb-iac/ansible/venv/bin/python",
+    "ansible.python.activationScript": "/home/guillaume/workspace/gbweb-iac/ansible/venv/activate"
+}

@@ -1,0 +1,20 @@
+---
+# Role metadata
+galaxy_info:
+  author: Guillaume
+  description: Enforce server configuration from Terraform cloud-init
+  company: GBWeb
+  license: MIT
+  min_ansible_version: 2.9
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+  galaxy_tags:
+    - system
+    - security
+    - server
+    - hardening
+
+dependencies: []

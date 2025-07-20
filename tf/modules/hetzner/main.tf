@@ -86,6 +86,13 @@ resource "hcloud_volume_attachment" "data_volume_attachment" {
   automount = true
 }
 
+# Reverse DNS for the server
+resource "hcloud_rdns" "web_server_rdns" {
+  server_id  = hcloud_server.web_server.id
+  ip_address = hcloud_server.web_server.ipv4_address
+  dns_ptr    = "${var.server_name}.${var.domain}"
+}
+
 # Secondary Floating IPs (on-demand, recreated when enabled)
 resource "hcloud_floating_ip" "secondary_ipv4" {
   count         = var.enable_secondary_ipv4 ? 1 : 0

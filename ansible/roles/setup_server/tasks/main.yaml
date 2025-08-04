@@ -150,7 +150,7 @@
 - name: Configure SSH hardening
   ansible.builtin.template:
     src: sshd_config.j2
-    dest: /etc/ssh/sshd_config.d/90-ansible.conf
+    dest: /etc/ssh/sshd_config.d/90-custom.conf
     owner: root
     group: root
     mode: '0644'
@@ -167,57 +167,38 @@
   become: true
   notify: restart fail2ban
 
-- name: Create baseline chain once
-  iptables:
-    chain: ANSIBLE-SYSTEM
-    table: filter
-    chain_management: true
-    state: present
-
-- name: Ensure DOCKER-USER chain exists
+- name: Makes sure chains DOCKER-USER and ANSIBLE-SYSTEM exist
   ansible.builtin.iptables:
-    chain: DOCKER-USER
+    chain: "{{ item }}"
     table: filter
     chain_management: true
     state: present
-  register: chain_created
-
-- name: Baseline and policies in one iptables_raw block
-  community.general.iptables_raw:
-    name: ansible_baseline            # marker comment inside rules‑set
-    table: filter
-    rules: |
-      #######################################################################
-      # Built-in chain policies
-      #######################################################################
-      -P INPUT    deny
-      -P OUTPUT   accept
-      -P FORWARD  accept
-
-      #######################################################################
-      # Baseline chain: ANSIBLE-SYSTEM
-      #######################################################################
-      -F ANSIBLE-SYSTEM
-
-      # 1. keep states
-      -A ANSIBLE-SYSTEM -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-
-      # 2. system ports
-      -A ANSIBLE-SYSTEM -p tcp --dport{{ ssh_port }} -j ACCEPT
-    state: present
+  loop:
+    - DOCKER-USER
+    - ANSIBLE-SYSTEM
   become: true
-  notify: save_fw
 
-- name: Jump from DOCKER-USER to ANSIBLE-SYSTEM (idempotent)
+- name: Deploy iptables filter rules
+  ansible.builtin.template:
+    src: filter_rules.j2
+    dest: /etc/iptables/ansible_filter.rules
+    owner: root
+    mode: '0644'
+  notify:
+    - restore_rules
+    - save_fw
+  become: true
+
+- name: Jump DOCKER-USER → ANSIBLE-SYSTEM (idempotent)
   ansible.builtin.iptables:
-    table: filter
     chain: DOCKER-USER
+    table: filter
     jump: ANSIBLE-SYSTEM
-    insert: true              # always at rule #1
-    comment: "ansible-baseline"
+    rule_num: 1
+    comment: ansible-baseline
     state: present
-  become: true
   notify: save_fw
+  become: true
 
 - name: Ensure SSH service is running and enabled
   ansible.builtin.systemd:

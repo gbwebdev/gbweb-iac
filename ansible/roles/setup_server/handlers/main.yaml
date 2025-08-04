@@ -13,7 +13,17 @@
     state: restarted
   become: true
 
+- name: restore_rules
+  community.general.iptables_state:
+    state: restored
+    table: filter
+    path: /etc/iptables/ansible_filter.rules
+    noflush: true          # ne touche pas aux chaînes Docker
+  become: true
+
 - name: save_fw
   community.general.iptables_state:
     state: saved
-    path: /etc/iptables/rules.v4     # utilisé par iptables‑persistent
+    table: filter
+    path: /etc/iptables/rules.v4
+  become: true

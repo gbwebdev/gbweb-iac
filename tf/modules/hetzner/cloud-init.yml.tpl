@@ -49,7 +49,7 @@ users:
 
 write_files:
   # SSH hardening (port + keys-only)
-  - path: /etc/ssh/sshd_config.d/90-cloud-init.conf
+  - path: /etc/ssh/sshd_config.d/90-custom.conf
     owner: root:root
     permissions: '0644'
     content: |

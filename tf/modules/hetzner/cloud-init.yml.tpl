@@ -26,7 +26,7 @@ packages:
   - wget
   - git
   - htop
-  - ufw
+  - iptables-persistent
   - fail2ban
   - unzip
   - vim
@@ -68,19 +68,47 @@ write_files:
       [sshd]
       enabled  = true
       port     = ${ssh_port}
+      filter   = sshd
+      logpath  = /var/log/auth.log
       maxretry = 3
       bantime  = 7200
       findtime = 1200
+      action   = iptables[
+                   name=%(__name__)s,
+                   chain="DOCKER-USER",
+                   port=${ssh_port},
+                   protocol=tcp]
+
+  # Initial iptables configuration
+  - path: /etc/iptables/rules.v4
+    owner: root:root
+    permissions: '0644'
+    content: |
+      *filter
+      :INPUT DENY [0:0]
+      :FORWARD ACCEPT [0:0]
+      :OUTPUT ACCEPT [0:0]
+      :DOCKER-USER - [0:0]
+      :ANSIBLE-SYSTEM - [0:0]
+      
+      # ANSIBLE-SYSTEM baseline chain
+      -A ANSIBLE-SYSTEM -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      -A ANSIBLE-SYSTEM -p tcp --dport ${ssh_port} -j ACCEPT
+      
+      # DOCKER-USER jumps to ANSIBLE-SYSTEM
+      -A DOCKER-USER -j ANSIBLE-SYSTEM -m comment --comment "ansible-baseline"
+      
+      COMMIT
 
 
 runcmd:
-  - ufw --force reset
-  - ufw default deny incoming
-  - ufw default allow outgoing
-  - ufw allow ${ssh_port}/tcp comment 'SSH (custom port)'
-  - ufw --force enable
+  # Apply iptables rules
+  - iptables-restore < /etc/iptables/rules.v4
+  # Restart services
   - systemctl restart ssh
   - systemctl enable --now fail2ban
+  # Save iptables rules (will be automatically restored on boot by iptables-persistent)
+  - netfilter-persistent save
 
 final_message: |
   Cloud-init finished – connect with:

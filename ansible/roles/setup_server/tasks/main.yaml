@@ -29,6 +29,20 @@
     path: /dev/sdb
   register: sdb_exists
 
+- name: Check if /dev/sdb1 partition exists
+  ansible.builtin.stat:
+    path: /dev/sdb1
+  register: sdb1_exists
+  when: sdb_exists.stat.exists
+
+- name: Get partition information for /dev/sdb
+  ansible.builtin.parted:
+    device: /dev/sdb
+    unit: MiB
+  register: sdb_info
+  become: true
+  when: sdb_exists.stat.exists
+
 - name: Set up disk partition on /dev/sdb
   ansible.builtin.parted:
     device: /dev/sdb
@@ -37,7 +51,17 @@
     part_type: primary
     fs_type: ext4
   become: true
-  when: sdb_exists.stat.exists
+  when: 
+    - sdb_exists.stat.exists
+    - not sdb1_exists.stat.exists or sdb_info.partitions | length == 0
+
+- name: Check if /dev/sdb1 has ext4 filesystem
+  ansible.builtin.command:
+    cmd: blkid -s TYPE -o value /dev/sdb1
+  register: sdb1_fstype
+  failed_when: false
+  changed_when: false
+  when: sdb_exists.stat.exists and sdb1_exists.stat.exists
 
 - name: Create ext4 filesystem on /dev/sdb1
   ansible.builtin.filesystem:
@@ -45,7 +69,10 @@
     dev: /dev/sdb1
     opts: -L data
   become: true
-  when: sdb_exists.stat.exists
+  when: 
+    - sdb_exists.stat.exists
+    - sdb1_exists.stat.exists
+    - sdb1_fstype.stdout != "ext4"
 
 - name: Create /data mount point
   ansible.builtin.file:
@@ -140,32 +167,57 @@
   become: true
   notify: restart fail2ban
 
-- name: Reset UFW to defaults
-  community.general.ufw:
-    state: reset
-  become: true
+- name: Create baseline chain once
+  iptables:
+    chain: ANSIBLE-SYSTEM
+    table: filter
+    chain_management: true
+    state: present
 
-- name: Set UFW default policies
-  community.general.ufw:
-    direction: "{{ item.direction }}"
-    policy: "{{ item.policy }}"
-  become: true
-  loop:
-    - { direction: 'incoming', policy: 'deny' }
-    - { direction: 'outgoing', policy: 'allow' }
+- name: Ensure DOCKER-USER chain exists
+  ansible.builtin.iptables:
+    chain: DOCKER-USER
+    table: filter
+    chain_management: true
+    state: present
+  register: chain_created
 
-- name: Allow SSH on custom port
-  community.general.ufw:
-    rule: allow
-    port: "{{ ssh_port | default('22') }}"
-    proto: tcp
-    comment: 'SSH (custom port)'
-  become: true
+- name: Baseline and policies in one iptables_raw block
+  community.general.iptables_raw:
+    name: ansible_baseline            # marker comment inside rules‑set
+    table: filter
+    rules: |
+      #######################################################################
+      # Built-in chain policies
+      #######################################################################
+      -P INPUT    deny
+      -P OUTPUT   accept
+      -P FORWARD  accept
 
-- name: Enable UFW
-  community.general.ufw:
-    state: enabled
+      #######################################################################
+      # Baseline chain: ANSIBLE-SYSTEM
+      #######################################################################
+      -F ANSIBLE-SYSTEM
+
+      # 1. keep states
+      -A ANSIBLE-SYSTEM -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+      # 2. system ports
+      -A ANSIBLE-SYSTEM -p tcp --dport{{ ssh_port }} -j ACCEPT
+    state: present
   become: true
+  notify: save_fw
+
+- name: Jump from DOCKER-USER to ANSIBLE-SYSTEM (idempotent)
+  ansible.builtin.iptables:
+    table: filter
+    chain: DOCKER-USER
+    jump: ANSIBLE-SYSTEM
+    insert: true              # always at rule #1
+    comment: "ansible-baseline"
+    state: present
+  become: true
+  notify: save_fw
 
 - name: Ensure SSH service is running and enabled
   ansible.builtin.systemd:

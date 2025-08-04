@@ -12,3 +12,8 @@
     name: fail2ban
     state: restarted
   become: true
+
+- name: save_fw
+  community.general.iptables_state:
+    state: saved
+    path: /etc/iptables/rules.v4     # utilisé par iptables‑persistent

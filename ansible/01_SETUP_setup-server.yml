@@ -1,0 +1,6 @@
+---
+- name: Setup web servers
+  hosts: hetzner
+
+  roles:
+    - setup_server

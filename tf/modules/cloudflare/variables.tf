@@ -34,3 +34,21 @@ variable "trusted_cidrs" {
 }
 
 # Add more variables as needed for Cloudflare configuration
+
+variable "ionos_gateway_name" {
+  description = "The name of the IONOS gateway"
+  type        = string
+  default     = "gw"
+}
+
+variable "ionos_gateway_ipv4" {
+  description = "The IPv4 address of the IONOS gateway"
+  type        = string
+  sensitive   = true
+}
+
+variable "ionos_gateway_ipv6" {
+  description = "The IPv6 address of the IONOS gateway"
+  type        = string
+  sensitive   = true
+}

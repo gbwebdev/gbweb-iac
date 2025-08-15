@@ -130,6 +130,25 @@ variable "hetzner_enable_secondary_ipv6" {
   default     = false
 }
 
+
+variable "ionos_gateway_name" {
+  description = "Name of the IONOS gateway VPS"
+  type        = string
+  default     = "ionos-gateway"
+}
+
+variable "ionos_gateway_ipv4" {
+  description = "IPv4 address of the IONOS gateway VPS"
+  type        = string
+  default     = ""
+}
+
+variable "ionos_gateway_ipv6" {
+  description = "IPv6 address of the IONOS gateway VPS"
+  type        = string
+  default     = ""
+}
+
 # Cloudflare specific variables
 variable "cloudflare_api_token" {
   description = "Cloudflare API token for managing DNS and other services"
@@ -143,3 +162,4 @@ variable "cloudflare_account_id" {
   type        = string
   sensitive   = true
 }
+

@@ -6,6 +6,10 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.45"
     }
+    # ionoscloud = {
+    #   source = "ionos-cloud/ionoscloud"
+    #   version = ">= 6.4.10"
+    # }
     cloudflare = {
       source  = "cloudflare/cloudflare"
       version = "~> 5.7"
@@ -18,10 +22,16 @@ provider "hcloud" {
   token = var.hetzner_token
 }
 
+# # Configure the IONOS Cloud Provider
+# provider "ionoscloud" {
+#   token             = var.ionos_token
+# }
+
 # Configure the Cloudflare Provider
 provider "cloudflare" {
   api_token = var.cloudflare_api_token  
 }
+
 
 # Local values for workspace-aware naming
 locals {
@@ -37,8 +47,6 @@ locals {
     ]
   )
 }
-
-
 
 # Hetzner Cloud VPS Module
 module "hetzner" {
@@ -72,5 +80,7 @@ module "cloudflare" {
   home_ipv4 = var.home_ipv4
   home_server_ipv6 = var.home_server_ipv6
   trusted_cidrs = local.trusted_cidrs
+  ionos_gateway_name = var.ionos_gateway_name
+  ionos_gateway_ipv4 = var.ionos_gateway_ipv4
+  ionos_gateway_ipv6 = var.ionos_gateway_ipv6
 }
-

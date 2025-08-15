@@ -12,3 +12,6 @@ hetzner_server_location  = "fsn1"      # nbg1 (Nuremberg), fsn1 (Falkenstein), h
 # Enable secondary IPs for production
 hetzner_enable_secondary_ipv4 = false
 hetzner_enable_secondary_ipv6 = false
+
+
+ionos_gateway_name      = "gw"

@@ -50,6 +50,9 @@ tf/
 # Navigate to the tf directory
 cd tf
 
+# Set up state file encryption (first time or new machine)
+make setup-encryption    # Creates/imports GPG key for state encryption
+
 # Set up variables and secrets from templates
 make setup-variables
 make setup-secrets
@@ -85,6 +88,9 @@ ssh_allowed_ips = ["your.ip.address/32"]
 ### 3. Deploy Infrastructure
 
 ```bash
+# Decrypt any existing state files (after git pull)
+make decrypt-states
+
 # Initialize Terraform
 make init ENV=production
 
@@ -93,6 +99,9 @@ make plan ENV=production
 
 # Apply the configuration
 make apply ENV=production
+
+# Encrypt state files before committing
+make encrypt-states
 ```
 
 ## 🛠️ Available Commands
@@ -115,9 +124,12 @@ The `Makefile` provides convenient commands for infrastructure management:
 
 ### Security
 
+- `make setup-encryption` - Initial setup for state encryption (creates/imports GPG key)
 - `make encrypt-states` - Encrypt all state files
 - `make decrypt-states` - Decrypt state files for operations
 - `make cleanup-states` - Remove plaintext state files
+- `make export-key` - Export GPG key for use on other machines
+- `make import-key` - Import GPG key on new machine
 
 ### Validation
 
@@ -147,9 +159,22 @@ The Hetzner module creates:
 
 ### State File Encryption
 
-- Terraform state files contain sensitive information
-- Use `make encrypt-states` to encrypt state files with GPG
-- State files are automatically decrypted during operations and re-encrypted after
+- Terraform state files contain sensitive information and are automatically encrypted
+- Uses portable GPG encryption with fixed key identifier (hostname independent)
+- Use `make decrypt-states` after `git pull` to decrypt state files
+- Use `make encrypt-states` before `git push` to encrypt state files
+- Supports multi-environment setup: export key from one machine, import on others
+
+**Multi-Machine Setup:**
+
+```bash
+# On primary machine:
+make setup-encryption    # Create GPG key (asks for confirmation)
+make export-key          # Export key for other machines
+
+# On new machines (after copying key files):
+make import-key          # Import existing GPG key
+```
 
 ### Access Control
 

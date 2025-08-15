@@ -2,7 +2,7 @@
 # This Makefile provides a streamlined way to manage Terraform infrastructure
 # with per-environment secrets and encrypted state files.
 .PHONY: help init plan apply destroy workspace-list workspace-new workspace-select fmt validate
-.PHONY: edit-variables check-variables setup-variables edit-secrets check-secrets setup-secrets encrypt-states decrypt-states cleanup-states check-states tofu
+.PHONY: edit-variables check-variables setup-variables edit-secrets check-secrets setup-secrets setup-encryption encrypt-states decrypt-states cleanup-states check-states export-key import-key tofu import
 
 # Default target
 help:
@@ -18,6 +18,7 @@ help:
 	@echo "  plan ENV=production    - Plan changes for environment"
 	@echo "  apply ENV=production   - Apply changes for environment"
 	@echo "  destroy ENV=production - Destroy infrastructure for environment"
+	@echo "  import ENV=production  - Import existing resources into state"
 	@echo "  tofu <args> ENV=production - Run any tofu command with proper environment setup"
 	@echo ""
 	@echo "🔐 Secrets Management:"
@@ -31,10 +32,16 @@ help:
 	@echo "  check-variables ENV=production - Check if variables exist for environment"
 	@echo ""
 	@echo "🔒 State File Management:"
-	@echo "  encrypt-states         - Encrypt all .tfstate files to .tfstate.gpg"
-	@echo "  decrypt-states         - Decrypt all .tfstate.gpg files to .tfstate"
+	@echo "  setup-encryption       - Initial setup for state encryption on new machines"
+	@echo "  encrypt-states         - Manually encrypt all .tfstate files to .tfstate.gpg"
+	@echo "  decrypt-states         - Manually decrypt all .tfstate.gpg files to .tfstate"
 	@echo "  cleanup-states         - Remove plaintext .tfstate files (keep encrypted)"
 	@echo "  check-states           - Check if all state files have encrypted versions"
+	@echo "  export-key             - Export GPG key for use on other machines"
+	@echo "  import-key             - Import GPG key on new machine"
+	@echo ""
+	@echo "  ℹ️  Note: State files are automatically decrypted before read operations"
+	@echo "           and encrypted after write operations (apply, destroy, import)"
 	@echo ""
 	@echo "🏢 Workspace Management:"
 	@echo "  workspace-list         - List all workspaces"
@@ -46,6 +53,9 @@ help:
 	@echo "  fmt                    - Format Terraform files"
 	@echo "  validate               - Validate Terraform configuration"
 	@echo ""
+	@echo "🔧 Utility Commands:"
+	@echo "  check-env              - Verify environment variable is set"
+	@echo ""
 	@echo "🔧 Shell Completion:"
 	@echo "  Run './completion/install.sh' to enable tab completion for this Makefile"
 	@echo "  Supports bash and zsh with smart environment and command completion"
@@ -53,24 +63,28 @@ help:
 	@echo "📁 Available environments: production, staging, development"
 	@echo ""
 	@echo "💡 Example workflows:"
-	@echo "  # Using command line ENV parameter:"
+	@echo "  # First time setup on any machine:"
+	@echo "  make setup-encryption          # Create/import GPG key for state encryption"
 	@echo "  make setup-secrets             # Create all secrets files"
-	@echo "  make edit-secrets ENV=production # Edit production secrets"
-	@echo "  make decrypt-states            # Decrypt state files after pull"
-	@echo "  make init ENV=production"
-	@echo "  make plan ENV=production"
-	@echo "  make apply ENV=production"
-	@echo "  make encrypt-states            # Encrypt before commit"
+	@echo "  make export-key                # Export key for use on other machines"
 	@echo ""
-	@echo "  # Using environment variable:"
+	@echo "  # New machine setup (after copying key files):"
+	@echo "  make import-key                # Import existing GPG key"
+	@echo "  make decrypt-states            # Decrypt state files after pull"
+	@echo ""
+	@echo "  # Daily workflow (now with automatic encryption/decryption):"
+	@echo "  make init ENV=production       # Automatically decrypts state files"
+	@echo "  make plan ENV=production       # Automatically decrypts state files"
+	@echo "  make apply ENV=production      # Auto-decrypts before, auto-encrypts after"
+	@echo "  # State files are now automatically managed!"
+	@echo ""
+	@echo "  # Using environment variable (now with automatic encryption):"
 	@echo "  export TERRAFORM_ENV=production"
 	@echo "  make setup-secrets"
 	@echo "  make edit-secrets"
-	@echo "  make decrypt-states"
-	@echo "  make init"
-	@echo "  make plan"
-	@echo "  make apply"
-	@echo "  make encrypt-states"
+	@echo "  make init                      # Auto-decrypts state files"
+	@echo "  make plan                      # Auto-decrypts state files" 
+	@echo "  make apply                     # Auto-decrypts before, auto-encrypts after"
 	@echo ""
 	@echo "  # Using the flexible tofu command:"
 	@echo "  make tofu show ENV=production          # Show current state"
@@ -153,13 +167,13 @@ edit-variables: check-env
 	@echo "✅ Variables file updated for $(ENV)"
 
 # Initialize Terraform
-init: check-env check-variables check-secrets
+init: check-env check-variables check-secrets decrypt-states-auto
 	@echo "🚀 Initializing Terraform for $(ENV)..."
 	tofu init
 	tofu workspace select $(ENV) || tofu workspace new $(ENV)
 
 # Plan changes
-plan: check-env check-variables check-secrets
+plan: check-env check-variables check-secrets decrypt-states-auto
 	@echo "📋 Planning changes for $(ENV)..."
 	tofu workspace select $(ENV)
 	$(eval TOFU_ARGS := $(filter-out $@,$(MAKECMDGOALS)))
@@ -169,45 +183,55 @@ plan: check-env check-variables check-secrets
 	@:
 
 # Apply changes
-apply: check-env check-variables check-secrets
+apply: check-env check-variables check-secrets decrypt-states-auto
 	@echo "🚀 Applying changes for $(ENV)..."
 	tofu workspace select $(ENV)
 	$(eval TOFU_ARGS := $(filter-out $@,$(MAKECMDGOALS)))
 	tofu apply -var-file="tfvars/$(ENV).tfvars" -var-file="tfvars/$(ENV).secrets.tfvars" $(TOFU_ARGS)
-	$(MAKE) encrypt-states
+	$(MAKE) encrypt-states-auto
 # Prevent make from interpreting additional arguments as targets
 %:
 	@:
 
 # Destroy infrastructure
-destroy: check-env check-variables check-secrets
+destroy: check-env check-variables check-secrets decrypt-states-auto
 	@echo "💥 Destroying infrastructure for $(ENV)..."
 	tofu workspace select $(ENV)
 	$(eval TOFU_ARGS := $(filter-out $@,$(MAKECMDGOALS)))
 	tofu destroy -var-file="tfvars/$(ENV).tfvars" -var-file="tfvars/$(ENV).secrets.tfvars" $(TOFU_ARGS)
-	$(MAKE) encrypt-states
+	$(MAKE) encrypt-states-auto
 # Prevent make from interpreting additional arguments as targets
 %:
 	@:
 
-# Destroy infrastructure
-import: check-env check-variables check-secrets
-	@echo "💥 Importing resources for $(ENV)..."
+# Import infrastructure
+import: check-env check-variables check-secrets decrypt-states-auto
+	@echo "📦 Importing resources for $(ENV)..."
 	tofu workspace select $(ENV)
 	$(eval TOFU_ARGS := $(filter-out $@,$(MAKECMDGOALS)))
 	tofu import -var-file="tfvars/$(ENV).tfvars" -var-file="tfvars/$(ENV).secrets.tfvars" $(TOFU_ARGS)
+	$(MAKE) encrypt-states-auto
 # Prevent make from interpreting additional arguments as targets
 %:
 	@:
 
 # Run any tofu command with proper environment setup
-tofu: check-env check-variables check-secrets
+tofu: check-env check-variables check-secrets decrypt-states-auto
 	@echo "🔧 Running tofu command for $(ENV)..."
 	tofu workspace select $(ENV)
 	$(eval TOFU_ARGS := $(filter-out $@,$(MAKECMDGOALS)))
 	$(eval TOFU_CMD := $(word 1,$(TOFU_ARGS)))
 	$(eval TOFU_REST := $(wordlist 2,$(words $(TOFU_ARGS)),$(TOFU_ARGS)))
-	tofu $(TOFU_CMD) -var-file="tfvars/$(ENV).tfvars" -var-file="tfvars/$(ENV).secrets.tfvars" $(TOFU_REST)
+	@# Check if command accepts -var-file parameters
+	@if echo "$(TOFU_CMD)" | grep -qE "^(plan|apply|destroy|refresh)$$"; then \
+		tofu $(TOFU_CMD) -var-file="tfvars/$(ENV).tfvars" -var-file="tfvars/$(ENV).secrets.tfvars" $(TOFU_REST); \
+	else \
+		tofu $(TOFU_CMD) $(TOFU_REST); \
+	fi
+	@# Auto-encrypt after state-modifying commands
+	@if echo "$(TOFU_CMD)" | grep -qE "^(apply|destroy|import)$$"; then \
+		$(MAKE) encrypt-states-auto; \
+	fi
 
 # Prevent make from interpreting additional arguments as targets
 %:
@@ -235,6 +259,10 @@ workspace-current:
 	tofu workspace show
 
 # State file encryption/decryption
+setup-encryption:
+	@echo "🔧 Setting up state file encryption..."
+	@./../scripts/tfstate-crypto.sh setup
+
 encrypt-states:
 	@echo "🔐 Encrypting Terraform state files..."
 	@./../scripts/tfstate-crypto.sh encrypt
@@ -243,6 +271,20 @@ decrypt-states:
 	@echo "🔓 Decrypting Terraform state files..."
 	@./../scripts/tfstate-crypto.sh decrypt
 
+# Silent auto-encrypt for use in workflows (no output unless error)
+encrypt-states-auto:
+	@./../scripts/tfstate-crypto.sh encrypt --force >/dev/null 2>&1 || { \
+		echo "❌ Failed to auto-encrypt state files"; \
+		./../scripts/tfstate-crypto.sh encrypt; \
+	}
+
+# Silent auto-decrypt for use in workflows (no output unless error)
+decrypt-states-auto:
+	@./../scripts/tfstate-crypto.sh decrypt >/dev/null 2>&1 || { \
+		echo "❌ Failed to auto-decrypt state files"; \
+		./../scripts/tfstate-crypto.sh decrypt; \
+	}
+
 cleanup-states:
 	@echo "🧹 Cleaning up plaintext state files..."
 	@./../scripts/tfstate-crypto.sh cleanup
@@ -250,3 +292,14 @@ cleanup-states:
 check-states:
 	@echo "🔍 Checking state file encryption status..."
 	@./../scripts/tfstate-crypto.sh check
+
+export-key:
+	@echo "📤 Exporting GPG key for use on other machines..."
+	@./../scripts/tfstate-crypto.sh export-key
+	@echo "📋 Next steps:"
+	@echo "  1. Securely copy .terraform-state-passphrase and .terraform-state-key.asc to other machines"
+	@echo "  2. Run 'make import-key' on the new machine"
+
+import-key:
+	@echo "📥 Importing GPG key on new machine..."
+	@./../scripts/tfstate-crypto.sh import-key

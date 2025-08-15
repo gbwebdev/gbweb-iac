@@ -45,11 +45,22 @@ gbweb-iac/
 
 ## 🚀 Quick Start
 
-### 1. Setup Environment
+### 1. Setup Encryption (First Time or New Machine)
 
 ```bash
 cd tf
 
+# First time setup (creates new GPG key)
+make setup-encryption  # Will ask for confirmation before creating new key
+
+# OR import existing key from another machine
+# (after copying .terraform-state-passphrase and .terraform-state-key.asc)
+make import-key
+```
+
+### 2. Setup Environment Variables
+
+```bash
 # Option 1: Use environment variable (recommended for daily use)
 export TERRAFORM_ENV=production
 
@@ -57,14 +68,14 @@ export TERRAFORM_ENV=production
 # make <command> ENV=production
 ```
 
-### 2. Install Shell Completion (Optional but Recommended)
+### 3. Install Shell Completion (Optional but Recommended)
 
 ```bash
 cd tf/completion
 ./install.sh  # Auto-detects your shell (bash/zsh)
 ```
 
-### 3. Initialize Infrastructure
+### 4. Initialize Infrastructure
 
 ```bash
 # Create configuration files from templates
@@ -126,10 +137,13 @@ You can specify the environment in two ways:
 
 | Command | Description |
 |---------|-------------|
+| `make setup-encryption` | Initial setup for state encryption (creates/imports GPG key) |
 | `make encrypt-states` | Encrypt all .tfstate files to .tfstate.gpg |
 | `make decrypt-states` | Decrypt all .tfstate.gpg files to .tfstate |
 | `make cleanup-states` | Remove plaintext .tfstate files (keep encrypted) |
 | `make check-states` | Check encryption status of state files |
+| `make export-key` | Export GPG key for use on other machines |
+| `make import-key` | Import GPG key on new machine |
 
 ### Workspace Management
 
@@ -196,10 +210,28 @@ make encrypt-states
 
 ### Encrypted State Files
 
-- All `.tfstate` files are automatically encrypted with GPG
+- All `.tfstate` files are automatically encrypted with GPG using a portable key system
+- Uses fixed key identifier `terraform-state@gbweb-iac` (hostname independent)
 - Only encrypted `.tfstate.gpg` files are committed to git
+- Passphrase and private key are automatically managed and portable between machines
 - Use `make decrypt-states` after `git pull`
 - Use `make encrypt-states` before `git push`
+
+### Multi-Environment Encryption Setup
+
+**First machine setup:**
+```bash
+make setup-encryption    # Creates new GPG key (asks for confirmation)
+make export-key          # Export key for other machines
+# Securely copy .terraform-state-passphrase and .terraform-state-key.asc to other machines
+```
+
+**New machine setup:**
+```bash
+# After copying the key files securely
+make import-key          # Import existing GPG key
+make decrypt-states      # Decrypt existing state files
+```
 
 ### Secrets Management
 
@@ -233,6 +265,33 @@ make tofu show ENV=<TAB>      # Completes environments for tofu command
 ```
 
 ## 🔄 Typical Workflows
+
+### First Time Setup (Primary Machine)
+
+```bash
+export TERRAFORM_ENV=production
+make setup-encryption    # Creates new GPG key (confirms first)
+make export-key          # Export for other machines
+make setup-secrets && make setup-variables
+make edit-secrets && make edit-variables
+make init && make plan && make apply
+make encrypt-states
+```
+
+### New Machine Setup
+
+```bash
+# 1. Securely copy these files from primary machine:
+#    - .terraform-state-passphrase
+#    - .terraform-state-key.asc
+# 2. Import the key:
+make import-key
+# 3. Ready to use normally:
+export TERRAFORM_ENV=production
+make decrypt-states
+make plan && make apply
+make encrypt-states
+```
 
 ### Daily Development
 
@@ -284,10 +343,12 @@ make tofu destroy ENV=production  # Use with extreme caution!
 ## 🚨 Important Notes
 
 - **Always** run `make encrypt-states` before committing
-- **Never** commit `.tfstate` files or secrets
+- **Never** commit `.tfstate` files, secrets, or encryption keys
 - **Always** review `make plan` output before `make apply`
 - Use `make tofu plan -destroy` to preview destroy operations
 - Keep encrypted state files (`*.tfstate.gpg`) in version control
+- **Securely backup** your `.terraform-state-passphrase` and `.terraform-state-key.asc` files
+- When setting up on multiple machines, securely transfer the encryption files (use scp, encrypted email, etc.)
 
 ## 📚 Documentation
 

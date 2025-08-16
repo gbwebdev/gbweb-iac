@@ -8,6 +8,6 @@ bantime   = {{ fail2ban_ssh_bantime | default('7200') }}
 findtime  = {{ fail2ban_ssh_findtime | default('1200') }}
 action    = iptables[
               name=%(__name__)s,
-              chain="DOCKER-USER",
+              chain="SYSTEM-INPUT",
               port={{ ssh_port | default('22') }},
               protocol=tcp]

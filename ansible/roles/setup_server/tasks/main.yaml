@@ -119,11 +119,17 @@
   become: true
   when: ansible_ssh_public_keys is defined
 
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+  become: true
+
 - name: Ensure admin user exists
   ansible.builtin.user:
     name: "{{ admin_username }}"
     comment: "Primary administrator"
-    groups: sudo
+    groups: sudo,docker
     shell: /bin/bash
     state: present
   become: true
@@ -167,37 +173,140 @@
   become: true
   notify: restart fail2ban
 
-- name: Makes sure chains DOCKER-USER and ANSIBLE-SYSTEM exist
+- name: Build desired rules list
+  set_fact:
+    firewall_system_input_rules: >-
+      {{ 
+        [
+            {'protocol': 'tcp', 'destination_port': ssh_port|string, 'jump': 'ACCEPT', 'comment': 'ssh'}
+        ]
+      }}
+
+# Safety rules in INPUT (never flushed)
+- name: INPUT safety rules
   ansible.builtin.iptables:
-    chain: "{{ item }}"
-    table: filter
+    chain: INPUT
+    in_interface: "{{ item.in_interface | default(omit) }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    ctstate: "{{ item.ctstate | default(omit) }}"
+    jump: "{{ item.jump | default('ACCEPT') }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ firewall_input_safety_rules }}"
+  become: true
+
+# Our managed chain
+- name: Ensure SYSTEM-INPUT exists
+  ansible.builtin.iptables:
+    chain: SYSTEM-INPUT
+    state: present
     chain_management: true
-    state: present
-  loop:
-    - DOCKER-USER
-    - ANSIBLE-SYSTEM
   become: true
 
-- name: Deploy iptables filter rules
-  ansible.builtin.template:
-    src: filter_rules.j2
-    dest: /etc/iptables/ansible_filter.rules
-    owner: root
-    mode: '0644'
-  notify:
-    - restore_rules
-    - save_fw
-  become: true
-
-- name: Jump DOCKER-USER → ANSIBLE-SYSTEM (idempotent)
+# INPUT -> SYSTEM-INPUT (append so Fail2Ban f2b-* stays first)
+- name: Ensure INPUT jumps to SYSTEM-INPUT
   ansible.builtin.iptables:
-    chain: DOCKER-USER
-    table: filter
-    jump: ANSIBLE-SYSTEM
-    rule_num: 1
-    comment: ansible-baseline
+    chain: INPUT
+    jump: SYSTEM-INPUT
+    action: append
     state: present
-  notify: save_fw
+    comment: system-firewall
+  become: true
+
+# --- Build desired rules into a temp chain (for canonical compare)
+- name: Ensure temp chain exists
+  ansible.builtin.iptables:
+    chain: SYSTEM-INPUT-DESIRED
+    state: present
+    chain_management: true
+  changed_when: false
+  become: true
+
+- name: Flush temp chain
+  ansible.builtin.iptables:
+    chain: SYSTEM-INPUT-DESIRED
+    flush: yes
+  changed_when: false
+  become: true
+
+- name: Populate temp chain
+  include_tasks: iptables_rules.yaml
+  vars:
+    target_chain: SYSTEM-INPUT-DESIRED
+    rules: "{{ firewall_system_input_rules }}"
+    rules_dry_run: true
+
+- name: Get live rules (canonical)
+  command: bash -lc "iptables -S SYSTEM-INPUT"
+  register: live_rules
+  changed_when: false
+  become: true
+
+- name: Get desired rules (canonical from temp)
+  command: bash -lc "iptables -S SYSTEM-INPUT-DESIRED | sed -E 's/-DESIRED//'"
+  register: desired_rules
+  changed_when: false
+  become: true
+
+# Only if drift: flush & re-populate real chain using the SAME iptables_rules.yaml
+- name: Reconcile drift in SYSTEM-INPUT
+  when: live_rules.stdout != desired_rules.stdout
+  block:
+    - name: Flush SYSTEM-INPUT
+      ansible.builtin.iptables:
+        chain: SYSTEM-INPUT
+        flush: yes
+      changed_when: true
+      become: true
+
+    - name: Re-populate real chain
+      include_tasks: iptables_rules.yaml
+      vars:
+        target_chain: SYSTEM-INPUT
+        rules: "{{ firewall_system_input_rules }}"
+
+# Cleanup temp chain
+- name: Flush temp chain
+  ansible.builtin.iptables:
+    chain: SYSTEM-INPUT-DESIRED
+    flush: yes
+  changed_when: false
+  ignore_errors: true  # ok if it doesn't exist
+  become: true
+
+- name: Drop temp chain
+  command: iptables -X SYSTEM-INPUT-DESIRED
+  register: drop_tmp
+  failed_when: drop_tmp.rc not in [0,1]
+  changed_when: false
+  become: true
+
+# Policy after rules exist
+- name: INPUT policy DROP
+  ansible.builtin.iptables:
+    chain: INPUT
+    policy: DROP
+  become: true
+
+# --- Persistence at boot (rendered from the same vars for zero duplication) ---
+- name: Install boot restore file
+  template:
+    src: system.v4.boot.j2
+    dest: /etc/iptables/system.v4.boot
+    mode: '0644'
+  become: true
+
+- name: Install systemd unit
+  template:
+    src: system-firewall-restore.service.j2
+    dest: /etc/systemd/system/system-firewall-restore.service
+    mode: '0644'
+  become: true
+
+- name: Reload systemd & enable unit
+  systemd:
+    daemon_reload: true
+    name: system-firewall-restore
+    enabled: true
   become: true
 
 - name: Ensure SSH service is running and enabled
@@ -212,4 +321,49 @@
     name: fail2ban
     state: started
     enabled: true
+  become: true
+
+
+
+- name: Keyring dir
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Docker APT GPG key
+  get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  become: true
+
+- name: Add Docker APT repo (stable)
+  apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_lsb.codename | default(ansible_distribution_release) }} stable
+    filename: docker
+    state: present
+  become: true
+
+- name: Install Docker Engine (latest stable)
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Enable & start Docker
+  systemd:
+    name: docker
+    enabled: true
+    state: started
   become: true

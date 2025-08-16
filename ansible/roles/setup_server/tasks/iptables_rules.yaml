@@ -1,0 +1,23 @@
+---
+# Add all rules in {{ target_chain }}, then a terminal RETURN
+- name: Add desired rules to {{ target_chain }}
+  ansible.builtin.iptables:
+    chain: "{{ target_chain }}"
+    in_interface: "{{ item.in_interface | default(omit) }}"
+    protocol: "{{ item.protocol | default(omit) }}"
+    destination_port: "{{ item.destination_port | default(omit) }}"
+    ctstate: "{{ item.ctstate | default(omit) }}"
+    jump: "{{ item.jump | default('ACCEPT') }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ rules }}"
+  register: add_rules
+  changed_when: "{{ (not (rules_dry_run | default(false))) and (add_rules is changed) }}"
+  become: true
+
+- name: End with RETURN
+  ansible.builtin.iptables:
+    chain: "{{ target_chain }}"
+    jump: RETURN
+  register: add_return
+  changed_when: "{{ (not (rules_dry_run | default(false))) and add_return.changed }}"
+  become: true

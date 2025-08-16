@@ -1,0 +1,21 @@
+*filter
+:INPUT DROP [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT  ACCEPT [0:0]
+:SYSTEM-INPUT - [0:0]
+
+{# Safety rules (same list, no duplication) #}
+{% for r in firewall_input_safety_rules -%}
+-A INPUT{% if r.in_interface is defined %} -i {{ r.in_interface }}{% endif %}{% if r.protocol is defined %} -p {{ r.protocol }}{% endif %}{% if r.ctstate is defined %} -m conntrack --ctstate {{ r.ctstate }}{% endif %} -j {{ r.jump | default('ACCEPT') }}
+{% endfor -%}
+
+# Jump to managed chain
+-A INPUT -j SYSTEM-INPUT
+
+{# Managed rules (same list as runtime) #}
+{% for r in firewall_system_input_rules -%}
+-A SYSTEM-INPUT{% if r.in_interface is defined %} -i {{ r.in_interface }}{% endif %}{% if r.protocol is defined %} -p {{ r.protocol }}{% endif %}{% if r.destination_port is defined %} --dport {{ r.destination_port }}{% endif %}{% if r.ctstate is defined %} -m conntrack --ctstate {{ r.ctstate }}{% endif %} -j {{ r.jump | default('ACCEPT') }}
+{% endfor -%}
+-A SYSTEM-INPUT -j RETURN
+
+COMMIT

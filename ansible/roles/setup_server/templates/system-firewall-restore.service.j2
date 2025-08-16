@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore system firewall rules (IPv4) without flushing Docker rules
+Wants=network-online.target
+After=network-online.target
+Before=fail2ban.service docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/iptables-restore -w --noflush /etc/iptables/system.v4.boot
+
+[Install]
+WantedBy=multi-user.target

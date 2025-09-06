@@ -1,0 +1,6 @@
+---
+- name: Setup root stack
+  hosts: hetzner
+
+  roles:
+    - setup_root_stack

@@ -1,0 +1,56 @@
+networks:
+  calico_ctrl:
+    name: calico_ctrl
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.255.0/28
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    command: >
+      /usr/local/bin/etcd
+      --name=default
+      --data-dir=/etcd-data
+      --listen-client-urls=http://0.0.0.0:2379
+      --advertise-client-urls=http://172.20.255.2:2379
+      # single-member: keep peer on loopback inside the container
+      --listen-peer-urls=http://127.0.0.1:2380
+      --initial-advertise-peer-urls=http://127.0.0.1:2380
+      --initial-cluster=default=http://127.0.0.1:2380
+      --initial-cluster-state=new
+    networks:
+      calico_ctrl:
+        ipv4_address: 172.20.255.2
+    volumes:
+      - etcd_data:/etcd-data
+
+  calico-node:
+    image: docker.io/calico/node:v3.27.3
+    network_mode: host            # must program host netfilter/bridges
+    privileged: true
+    environment:
+      - DATASTORE_TYPE=etcdv3
+      - ETCD_ENDPOINTS=http://172.20.255.2:2379  # use etcd's static IP
+      - CALICO_NETWORKING_BACKEND=none
+      - FELIX_LOGSEVERITYSCREEN=info
+    volumes:
+      - /var/run/calico:/var/run/calico
+      - /lib/modules:/lib/modules:ro
+      - /run/xtables.lock:/run/xtables.lock
+    depends_on: [etcd]
+
+  calicoctl:
+    image: docker.io/calico/ctl:v3.27.3
+    networks: [calico_ctrl]
+    environment:
+      DATASTORE_TYPE: etcdv3
+      ETCD_ENDPOINTS: http://etcd:2379
+    entrypoint: ["/calicoctl"]
+    profiles: ["tools"]         # keeps it out of default up
+    # volumes:
+    #   - ./policies:/policies:ro
+
+volumes:
+  etcd_data:

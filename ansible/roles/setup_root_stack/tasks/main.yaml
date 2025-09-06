@@ -1,0 +1,76 @@
+- name: Create directory for manifests
+  ansible.builtin.file:
+    path: /etc/manifests
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+  
+- name: Create directory for docker-compose stacks
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Create directory for docker-compose system stacks
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose/system
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Create directory for docker-compose calico stack
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose/system/calico
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Install the calico docker-compose manifest
+  ansible.builtin.copy:
+    src: docker-compose/calico.yaml
+    dest: /etc/manifests/docker-compose/system/calico/docker-compose.yaml
+    owner: root
+    group: sysadmin
+    mode: '0640'
+    remote_src: no
+  become: true
+
+- name: Create directory for docker-compose traefik stack
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose/system/traefik
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Install the traefik docker-compose manifest
+  ansible.builtin.copy:
+    src: docker-compose/traefik.yaml
+    dest: /etc/manifests/docker-compose/system/traefik/docker-compose.yaml
+    owner: root
+    group: sysadmin
+    mode: '0640'
+    remote_src: no
+  become: true
+
+- name: Deploy calico
+  community.docker.docker_compose_v2:
+    project_src: /etc/manifests/docker-compose/system/calico
+    state: present
+  become: true
+
+- name: Deploy traefik
+  community.docker.docker_compose_v2:
+    project_src: /etc/manifests/docker-compose/system/traefik
+    state: present
+  become: true

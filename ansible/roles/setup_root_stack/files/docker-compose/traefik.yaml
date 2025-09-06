@@ -1,0 +1,17 @@
+# traefik.compose.yml (extrait)
+networks:
+  edge_rp:
+    name: edge_rp
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+services:
+  traefik:
+    image: traefik:v3.1
+    ports: ["80:80","443:443","443:443/udp"]
+    networks:
+      edge_rp:
+        ipv4_address: 172.20.0.2
+    # ... (providers docker, acme, etc.)

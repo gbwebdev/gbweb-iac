@@ -1,0 +1,9 @@
+- name: Deploy public apps
+  ansible.builtin.git:
+    repo: 'git@github.com:yourorg/yourrepo.git'
+    dest: /etc/manifests/docker-compose/public-apps
+    version: main
+    force: yes                # overwrite local changes if needed
+    accept_hostkey: yes       # automatically accept SSH host keys
+    key_file: /home/ansible/.ssh/deploy_key  # custom SSH key
+    update: yes

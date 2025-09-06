@@ -93,11 +93,23 @@
   become: true
   when: sdb_exists.stat.exists
 
+- name: Ensure docker group exists
+  ansible.builtin.group:
+    name: docker
+    state: present
+  become: true
+
+- name: Ensure sysadmin group exists
+  ansible.builtin.group:
+    name: sysadmin
+    state: present
+  become: true
+
 - name: Ensure ansible user exists
   ansible.builtin.user:
     name: ansible
     comment: "Ansible automation account"
-    groups: sudo
+    groups: sudo,docker
     shell: /bin/bash
     state: present
   become: true
@@ -119,17 +131,11 @@
   become: true
   when: ansible_ssh_public_keys is defined
 
-- name: Ensure docker group exists
-  ansible.builtin.group:
-    name: docker
-    state: present
-  become: true
-
 - name: Ensure admin user exists
   ansible.builtin.user:
     name: "{{ admin_username }}"
     comment: "Primary administrator"
-    groups: sudo,docker
+    groups: sudo,docker,sysadmin
     shell: /bin/bash
     state: present
   become: true
@@ -361,9 +367,27 @@
     update_cache: yes
   become: true
 
+- name: Install custom docker configuration
+  ansible.builtin.copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  register: docker_daemon_config
+
 - name: Enable & start Docker
   systemd:
     name: docker
     enabled: true
     state: started
+  become: true
+  register: docker_service
+
+- name: Restart Docker if daemon config changed
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: docker_daemon_config.changed and not docker_service.changed
   become: true

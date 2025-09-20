@@ -30,6 +30,9 @@ essential_packages:
   - vim
   - ca-certificates
   - gnupg
+  - jq
+  - yq
+  - openssl
 
 # Fail2Ban SSH jail settings
 fail2ban_ssh_maxretry: 3

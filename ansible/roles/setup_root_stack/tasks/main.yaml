@@ -74,3 +74,7 @@
     project_src: /etc/manifests/docker-compose/system/traefik
     state: present
   become: true
+
+- name: Install kustomize
+  shell: "curl -s 'https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh'  | bash"
+  become: true

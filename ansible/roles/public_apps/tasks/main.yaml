@@ -1,0 +1,154 @@
+- name: Ensure dirs
+  file: { path: "{{ item }}", state: directory, mode: "0755" }
+  loop: ["{{ apps_root }}", "{{ rendered_dir }}", "{{ sets_dir }}"]
+
+- name: Sync app repos
+  ansible.builtin.git:
+    repo: "{{ item.repo | default('git@github.com:gbwebdev/gbweb-public-apps--' ~ item.name ~ '.git', true)}}"
+    dest: "{{ apps_root ~ '/' ~ item.id | default(item.name) }}"
+    version: "{{ item.ref }}"
+    force: yes
+  loop: "{{ apps }}"
+  loop_control: { label: "{{ item.name }}" }
+
+- name: Deploy compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/compose/' }}"
+    files:
+      - base/compose.yml
+      - "{{ inventory_hostname ~ '/compose.override.yml' }}"
+    project_name: "{{ item.id | default(item.name) }}"
+    state: present
+    pull: always
+  loop: "{{ apps }}"
+  loop_control: { label: "{{ item.name }}" }
+
+#####################################################################
+# HostEndpoints from Docker networks labeled netpol.*
+#####################################################################
+- name: List docker networks
+  command: docker network ls --format '{{"{{"}}.ID{{"}}"}}'
+  register: net_ids
+
+- name: Inspect networks
+  command: docker network inspect {{ item }}
+  loop: "{{ net_ids.stdout_lines }}"
+  register: net_inspects
+  changed_when: false
+
+- name: Build HEPs (from labeled bridges)
+  vars:
+    nets: >-
+      {{
+        net_inspects.results
+        | map(attribute='stdout') | map('from_json') | map('first') | list
+        | selectattr('Labels.netpol.app','defined')
+      }}
+  set_fact:
+    heps: >-
+      {{
+        nets | map('extract', {
+          'name':'Name','labels':'Labels',
+          'iface':['Options','com.docker.network.bridge.name']
+        }) | map('combine', {'node': inventory_hostname}) | list
+      }}
+
+- name: Render HEP files
+  copy:
+    dest: "{{ rendered_dir }}/hep-{{ item.labels['netpol.app'] }}-{{ item.labels['netpol.role'] }}.yaml"
+    mode: "0644"
+    content: |
+      apiVersion: projectcalico.org/v3
+      kind: HostEndpoint
+      metadata:
+        name: {{ item.iface }}
+        labels:
+          app: {{ item.labels['netpol.app'] }}
+          role: {{ item.labels['netpol.role'] }}
+      spec:
+        node: {{ item.node }}
+        interfaceName: "{{ item.iface }}"
+  loop: "{{ heps }}"
+
+- name: Apply HEPs
+  command: "{{ calicoctl }} apply -f {{ rendered_dir }}/hep-{{ item.labels['netpol.app'] }}-{{ item.labels['netpol.role'] }}.yaml --allow-version-mismatch"
+  loop: "{{ heps }}"
+  changed_when: "'Successfully' in (hep_apply.stdout|default('')) or hep_apply.rc == 0"
+  register: hep_apply
+
+#####################################################################
+# Per-app policies: render from contract OR apply raw Calico YAML
+#####################################################################
+# - name: Gather per-app policy sources
+#   find:
+#     paths: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/calico/' }}"
+#     patterns: ["egress.yaml","calico/*.yaml"]
+#     file_type: file
+#   loop: "{{ apps }}"
+#   register: app_netpols
+#   changed_when: false
+
+# - name: Render per-app GNP from contract (egress.yaml)
+#   vars:
+#     appdir: "{{ item.files | map(attribute='path') | list | first | dirname }}"
+#   when: item.files | selectattr('path','search','egress.yaml') | list | length > 0
+#   template:
+#     src: gnp_egress.j2
+#     dest: "{{ rendered_dir }}/gnp-{{ (appdir | regex_search('/([^/]+)/netpol$', '\\1')) }}.yaml"
+#   loop: "{{ app_netpols.results }}"
+#   loop_control: { label: "{{ item.invocation.module_args.paths[0] | regex_search('/([^/]+)/netpol$','\\1') }}" }
+
+# - name: Apply rendered per-app GNPs
+#   shell: "{{ calicoctl }} apply -f {{ rendered_dir }}/gnp-*.yaml --allow-version-mismatch"
+#   args: { executable: /bin/bash }
+
+
+- name: Build calico manifests with kustomize
+  ansible.builtin.command:
+    cmd: kustomize build ."
+    chdir: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/calico/' ~ inventory_hostname }}"
+  register: kustomized_output
+
+- name: Apply policies with calicoctl (containerized)
+  ansible.builtin.shell: |
+    echo "{{ kustomized_output.stdout }}" | \
+    docker run --rm -i \
+      -v /etc/calico/calicoctl.cfg:/calicoctl.cfg \
+      calico/ctl:v3.27.3 \
+      calicoctl apply -f -
+  args:
+    executable: /bin/bash
+
+
+# - name: Apply raw Calico YAMLs if provided by apps
+#   shell: "{{ calicoctl }} apply -f {{ item.path }} --allow-version-mismatch"
+#   loop: "{{ app_netpols.results | map(attribute='files') | flatten | selectattr('path','search','/calico/') | list }}"
+#   when: app_netpols is defined
+
+#####################################################################
+# Global policies (infra-owned)
+#####################################################################
+- name: Deploy global policies (edge anti-lateral, default-deny)
+  copy:
+    dest: "{{ rendered_dir }}/99-global.yaml"
+    mode: "0644"
+    content: |
+      apiVersion: projectcalico.org/v3
+      kind: GlobalNetworkPolicy
+      metadata: { name: edge-no-lateral, order: 500 }
+      spec:
+        selector: "role == 'edge'"
+        applyOnForward: true
+        types: [Egress]
+        egress: [ { action: Deny } ]
+      ---
+      apiVersion: projectcalico.org/v3
+      kind: GlobalNetworkPolicy
+      metadata: { name: default-deny-egress, order: 10000 }
+      spec:
+        selector: "role in {'egress','back','edge'}"
+        applyOnForward: true
+        types: [Egress]
+        egress: [ { action: Deny } ]
+- name: Apply global policies
+  command: "{{ calicoctl }} apply -f {{ rendered_dir }}/99-global.yaml --allow-version-mismatch"

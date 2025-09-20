@@ -1,10 +1,19 @@
----
 apiVersion: projectcalico.org/v3
 kind: GlobalNetworkPolicy
 metadata:
-  name: default-deny
+  name: edge-ingress-from-apps
 spec:
-  selector: all()
-  types: [Ingress, Egress]
-  ingress: []
-  egress: []
+  selector: "role == 'edge'"
+  applyOnForward: true
+  types: 
+    - Ingress
+    - Egress
+
+  # Ingress sur le bridge edge_rp : autorise tout ce qui va vers Traefik (DNAT/published ports).
+  # En policy-only, le plus fiable est de laisser l'ingress et de serrer l'egress côté apps.
+  ingress:
+    - action: Allow
+
+  # Egress depuis edge_rp (est-ouest sur le bridge) : on bloque.
+  egress:
+    - action: Deny

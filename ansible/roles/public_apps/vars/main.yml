@@ -1,0 +1,4 @@
+apps:
+  - name: test-app
+    repo: https://github.com/gbwebdev/gbweb-public-apps--test-app.git
+    ref: main

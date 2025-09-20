@@ -15,7 +15,7 @@ all:
           # Server details
           server_name: ha-server
           domain: gbweb.fr
-          environment: production
+          environment_type: production
 
   vars:
     # SSH settings

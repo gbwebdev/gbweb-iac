@@ -75,6 +75,32 @@
     state: present
   become: true
 
+- name: Check if kustomize is installed
+  command: kustomize version
+  register: kustomize_check
+  ignore_errors: true
+  changed_when: false
+
 - name: Install kustomize
-  shell: "curl -s 'https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh'  | bash"
+  shell: "curl -s 'https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh' | bash -s -- /usr/local/bin/"
   become: true
+  when: kustomize_check.rc != 0
+
+- name: Copy netpol HEP generator script
+  copy:
+    src: docker_netpol_heps.py
+    dest: /usr/local/bin/docker_netpol_heps.py
+    mode: '0755'
+  become: true
+
+- name: Configure Git credential storage
+  command: "git config --global credential.helper store"
+
+- name: Populate the Git credential store
+  template:
+    src: git_credentials.j2
+    dest: /home/ansible/.git-credentials
+    owner: ansible
+    group: ansible
+    mode: u=rw,g=,o=
+  no_log: true

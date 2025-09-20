@@ -3,4 +3,4 @@
   hosts: hetzner
 
   roles:
-    - setup_root_stack
+    - public_apps

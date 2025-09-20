@@ -9,13 +9,14 @@ networks:
 services:
   etcd:
     image: quay.io/coreos/etcd:v3.5.13
+    restart: unless-stopped
+    # single-member: keep peer on loopback inside the container
     command: >
       /usr/local/bin/etcd
       --name=default
       --data-dir=/etcd-data
       --listen-client-urls=http://0.0.0.0:2379
       --advertise-client-urls=http://172.20.255.2:2379
-      # single-member: keep peer on loopback inside the container
       --listen-peer-urls=http://127.0.0.1:2380
       --initial-advertise-peer-urls=http://127.0.0.1:2380
       --initial-cluster=default=http://127.0.0.1:2380
@@ -29,6 +30,7 @@ services:
   calico-node:
     image: docker.io/calico/node:v3.27.3
     network_mode: host            # must program host netfilter/bridges
+    restart: unless-stopped
     privileged: true
     environment:
       - DATASTORE_TYPE=etcdv3

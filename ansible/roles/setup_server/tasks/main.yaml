@@ -109,7 +109,7 @@
   ansible.builtin.user:
     name: ansible
     comment: "Ansible automation account"
-    groups: sudo,docker
+    groups: sudo,docker,sysadmin
     shell: /bin/bash
     state: present
   become: true

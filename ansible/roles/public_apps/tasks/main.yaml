@@ -15,7 +15,8 @@
     version: "{{ item.ref }}"
     force: yes
   loop: "{{ apps }}"
-  loop_control: { label: "{{ item.name }}" }
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Deploy compose
   community.docker.docker_compose_v2:
@@ -40,82 +41,24 @@
     var: hep_result.stdout_lines
   register: hep_apply
 
-#####################################################################
-# Per-app policies: render from contract OR apply raw Calico YAML
-#####################################################################
-# - name: Gather per-app policy sources
-#   find:
-#     paths: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/calico/' }}"
-#     patterns: ["egress.yaml","calico/*.yaml"]
-#     file_type: file
-#   loop: "{{ apps }}"
-#   register: app_netpols
-#   changed_when: false
-
-# - name: Render per-app GNP from contract (egress.yaml)
-#   vars:
-#     appdir: "{{ item.files | map(attribute='path') | list | first | dirname }}"
-#   when: item.files | selectattr('path','search','egress.yaml') | list | length > 0
-#   template:
-#     src: gnp_egress.j2
-#     dest: "{{ rendered_dir }}/gnp-{{ (appdir | regex_search('/([^/]+)/netpol$', '\\1')) }}.yaml"
-#   loop: "{{ app_netpols.results }}"
-#   loop_control: { label: "{{ item.invocation.module_args.paths[0] | regex_search('/([^/]+)/netpol$','\\1') }}" }
-
-# - name: Apply rendered per-app GNPs
-#   shell: "{{ calicoctl }} apply -f {{ rendered_dir }}/gnp-*.yaml --allow-version-mismatch"
-#   args: { executable: /bin/bash }
-
 
 - name: Build calico manifests with kustomize
   ansible.builtin.command:
-    cmd: kustomize build ."
-    chdir: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/calico/' ~ inventory_hostname }}"
+    cmd: kustomize build .
+    chdir: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/calico/' ~ inventory_hostname }}"
   register: kustomized_output
   loop: "{{ apps }}"
-  loop_control: { label: "{{ item.name }}" }
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Apply policies with calicoctl (containerized)
   ansible.builtin.shell: |
-    echo "{{ kustomized_output.stdout }}" | \
-    docker run --rm -i \
-      -v /etc/calico/calicoctl.cfg:/calicoctl.cfg \
-      calico/ctl:v3.27.3 \
-      calicoctl apply -f -
+    cd /etc/manifests/docker-compose/system/calico && \
+    echo "{{ item.stdout }}" | \
+    docker compose run --rm -T calicoctl \
+      apply -f - --allow-version-mismatch
   args:
     executable: /bin/bash
-
-
-# - name: Apply raw Calico YAMLs if provided by apps
-#   shell: "{{ calicoctl }} apply -f {{ item.path }} --allow-version-mismatch"
-#   loop: "{{ app_netpols.results | map(attribute='files') | flatten | selectattr('path','search','/calico/') | list }}"
-#   when: app_netpols is defined
-
-#####################################################################
-# Global policies (infra-owned)
-#####################################################################
-- name: Deploy global policies (edge anti-lateral, default-deny)
-  copy:
-    dest: "{{ rendered_dir }}/99-global.yaml"
-    mode: "0644"
-    content: |
-      apiVersion: projectcalico.org/v3
-      kind: GlobalNetworkPolicy
-      metadata: { name: edge-no-lateral, order: 500 }
-      spec:
-        selector: "role == 'edge'"
-        applyOnForward: true
-        types: [Egress]
-        egress: [ { action: Deny } ]
-      ---
-      apiVersion: projectcalico.org/v3
-      kind: GlobalNetworkPolicy
-      metadata: { name: default-deny-egress, order: 10000 }
-      spec:
-        selector: "role in {'egress','back','edge'}"
-        applyOnForward: true
-        types: [Egress]
-        egress: [ { action: Deny } ]
-
-- name: Apply global policies
-  command: "{{ calicoctl }} apply -f {{ rendered_dir }}/99-global.yaml --allow-version-mismatch"
+  loop: "{{ kustomized_output.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"

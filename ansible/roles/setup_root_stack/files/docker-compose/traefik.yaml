@@ -1,4 +1,3 @@
-# traefik.compose.yml (extrait)
 networks:
   edge_rp:
     name: edge_rp
@@ -10,8 +9,35 @@ networks:
 services:
   traefik:
     image: traefik:v3.1
-    ports: ["80:80","443:443","443:443/udp"]
+    ports: ["443:443","443:443/udp"]
     networks:
       edge_rp:
         ipv4_address: 172.20.0.2
-    # ... (providers docker, acme, etc.)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./certs:/certs:ro  # Mount directory for Cloudflare certificates
+    environment:
+      - TRAEFIK_LOG_LEVEL=INFO
+    command:
+      # Entry points
+      - --entrypoints.websecure.address=:443
+      
+      # Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=edge_rp
+      
+      # File provider for certificates
+      - --providers.file.directory=/certs
+      - --providers.file.watch=true
+      
+      # Default TLS configuration
+      - --entrypoints.websecure.http.tls=true
+      
+      # API and dashboard (optional, for debugging)
+      - --api.dashboard=true
+      - --api.debug=true
+      
+      # Logging
+      - --log.level=INFO
+      - --accesslog=true

@@ -37,24 +37,35 @@ resource "cloudflare_dns_record" "home_aaaa_record" {
   comment = "Managed by Terraform"
 }
 
-resource "cloudflare_dns_record" "ionos_gateway_vps_a_record" {
+# resource "cloudflare_dns_record" "ionos_gateway_vps_a_record" {
+#   zone_id = cloudflare_zone.gbweb_fr.id
+#   name = "${var.ionos_gateway_name}.${cloudflare_zone.gbweb_fr.name}"
+#   content = var.ionos_gateway_ipv4
+#   ttl = 1 # Default Cloudflare TTL
+#   # We should switch to a 60s TTL one or two days before redeploying the server.
+#   type = "A"
+#   proxied = false
+#   comment = "Managed by Terraform"
+# }
+
+# resource "cloudflare_dns_record" "ionos_gateway_vps_aaaa_record" {
+#   zone_id = cloudflare_zone.gbweb_fr.id
+#   name = "${var.ionos_gateway_name}.${cloudflare_zone.gbweb_fr.name}"
+#   content = var.ionos_gateway_ipv6
+#   ttl = 1 # Default Cloudflare TTL
+#   # We should switch to a 60s TTL one or two days before redeploying the server.
+#   type = "AAAA"
+#   proxied = false
+#   comment = "Managed by Terraform"
+# }
+
+resource "cloudflare_dns_record" "test_app_cname_record" {
   zone_id = cloudflare_zone.gbweb_fr.id
-  name = "${var.ionos_gateway_name}.${cloudflare_zone.gbweb_fr.name}"
-  content = var.ionos_gateway_ipv4
+  name = "test-app.${cloudflare_zone.gbweb_fr.name}"
+  content = "${var.hetzner_server_name}.${cloudflare_zone.gbweb_fr.name}"
   ttl = 1 # Default Cloudflare TTL
-  # We should switch to a 60s TTL one or two days before redeploying the server.
-  type = "A"
-  proxied = false
+  type = "CNAME"
+  proxied = true
   comment = "Managed by Terraform"
 }
 
-resource "cloudflare_dns_record" "ionos_gateway_vps_aaaa_record" {
-  zone_id = cloudflare_zone.gbweb_fr.id
-  name = "${var.ionos_gateway_name}.${cloudflare_zone.gbweb_fr.name}"
-  content = var.ionos_gateway_ipv6
-  ttl = 1 # Default Cloudflare TTL
-  # We should switch to a 60s TTL one or two days before redeploying the server.
-  type = "AAAA"
-  proxied = false
-  comment = "Managed by Terraform"
-}

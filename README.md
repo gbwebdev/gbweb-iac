@@ -4,25 +4,29 @@ Infrastructure as Code for GBweb.fr (Internet facing infra)
 
 ## 🚀 Overview
 
-This repository contains the complete infrastructure setup for GBweb.fr using OpenTofu (Terraform) with a streamlined Makefile-based workflow. It provides secure, environment-specific infrastructure management with encrypted state files and automated secrets handling.
+This repository contains the complete infrastructure setup for GBweb.fr using OpenTofu (Terraform) with a streamlined Makefile-based workflow. It provides secure, environment-specific infrastructure management with SOPS-encrypted state files and automated secrets handling.
 
 ## ✨ Features
 
 - **🌐 Multi-environment support** (production, staging, development)
-- **🔐 Encrypted state files** with GPG encryption
-- **🔑 Secure secrets management** per environment
+- **🔑 Secure secrets management** with SOPS encryption
+- **🔒 Encrypted state files** using OpenTofu's native SOPS integration
 - **🛠️ Flexible OpenTofu command runner** for any tofu operation
 - **📝 Shell autocompletion** for bash and zsh
 - **⚡ Environment variable support** for streamlined workflows
+
+## Prerequisites
+
+- **OpenTofu** (not Terraform) - Required for SOPS encryption support
+- **SOPS** - For state file and secrets encryption
+- **Pre-commit** - For automated checks to prevent pushing unencrypted files
 
 ## 📁 Project Structure
 
 ```
 gbweb-iac/
 ├── README.md                    # This file
-├── scripts/
-│   └── tfstate-crypto.sh       # State file encryption/decryption
-└── tf/                         # Terraform/OpenTofu configuration
+└── tf/                         # OpenTofu configuration
     ├── main.tf                 # Main infrastructure configuration
     ├── variables.tf            # Variable definitions
     ├── outputs.tf              # Output definitions
@@ -34,8 +38,8 @@ gbweb-iac/
     │   ├── _.tfvars.example   # Variables template
     │   ├── _secrets.tfvars.example  # Secrets template
     │   ├── production.tfvars  # Production variables
-    │   └── production.secrets.tfvars  # Production secrets (encrypted)
-    ├── terraform.tfstate.d/   # Workspace state files (encrypted)
+    │   └── production.secrets.tfvars  # Production secrets (SOPS encrypted)
+    ├── terraform.tfstate.d/   # Workspace state files (SOPS encrypted)
     └── completion/            # Shell autocompletion scripts
         ├── install.sh         # Autocompletion installer
         ├── make-completion.bash  # Bash completion
@@ -45,18 +49,9 @@ gbweb-iac/
 
 ## 🚀 Quick Start
 
-### 1. Setup Encryption (First Time or New Machine)
+### 1. Setup SOPS Encryption
 
-```bash
-cd tf
-
-# First time setup (creates new GPG key)
-make setup-encryption  # Will ask for confirmation before creating new key
-
-# OR import existing key from another machine
-# (after copying .terraform-state-passphrase and .terraform-state-key.asc)
-make import-key
-```
+Ensure SOPS is configured with your preferred key management system (Age, PGP, AWS KMS, etc.).
 
 ### 2. Setup Environment Variables
 
@@ -87,11 +82,9 @@ make edit-secrets     # Edit secrets (uses $TERRAFORM_ENV or specify ENV=)
 make edit-variables   # Edit variables
 
 # Initialize and deploy
-make decrypt-states   # Decrypt state files (after git pull)
-make init            # Initialize Terraform
+make init            # Initialize OpenTofu
 make plan            # Review planned changes
 make apply           # Apply changes
-make encrypt-states  # Encrypt state files (before git push)
 ```
 
 ## 🔧 Available Commands
@@ -116,7 +109,7 @@ You can specify the environment in two ways:
 | Command | Description |
 |---------|-------------|
 | `make help` | Show comprehensive help with all commands |
-| `make init` | Initialize Terraform for environment |
+| `make init` | Initialize OpenTofu for environment |
 | `make plan` | Plan infrastructure changes |
 | `make apply` | Apply infrastructure changes |
 | `make destroy` | Destroy infrastructure |
@@ -133,18 +126,6 @@ You can specify the environment in two ways:
 | `make edit-variables` | Edit variables for specific environment |
 | `make check-variables` | Check if variables exist for environment |
 
-### State File Management
-
-| Command | Description |
-|---------|-------------|
-| `make setup-encryption` | Initial setup for state encryption (creates/imports GPG key) |
-| `make encrypt-states` | Encrypt all .tfstate files to .tfstate.gpg |
-| `make decrypt-states` | Decrypt all .tfstate.gpg files to .tfstate |
-| `make cleanup-states` | Remove plaintext .tfstate files (keep encrypted) |
-| `make check-states` | Check encryption status of state files |
-| `make export-key` | Export GPG key for use on other machines |
-| `make import-key` | Import GPG key on new machine |
-
 ### Workspace Management
 
 | Command | Description |
@@ -158,8 +139,8 @@ You can specify the environment in two ways:
 
 | Command | Description |
 |---------|-------------|
-| `make fmt` | Format Terraform files |
-| `make validate` | Validate Terraform configuration |
+| `make fmt` | Format OpenTofu files |
+| `make validate` | Validate OpenTofu configuration |
 
 ## 🔥 Advanced Usage
 
@@ -200,56 +181,79 @@ make init && make plan && make apply
 
 # Production deployment
 export TERRAFORM_ENV=production
-make decrypt-states
 make plan  # Review changes carefully
 make apply
-make encrypt-states
 ```
 
 ## 🔐 Security Features
 
-### Encrypted State Files
+### SOPS Encryption
 
-- All `.tfstate` files are automatically encrypted with GPG using a portable key system
-- Uses fixed key identifier `terraform-state@gbweb-iac` (hostname independent)
-- Only encrypted `.tfstate.gpg` files are committed to git
-- Passphrase and private key are automatically managed and portable between machines
-- Use `make decrypt-states` after `git pull`
-- Use `make encrypt-states` before `git push`
-
-### Multi-Environment Encryption Setup
-
-**First machine setup:**
-```bash
-make setup-encryption    # Creates new GPG key (asks for confirmation)
-make export-key          # Export key for other machines
-# Securely copy .terraform-state-passphrase and .terraform-state-key.asc to other machines
-```
-
-**New machine setup:**
-```bash
-# After copying the key files securely
-make import-key          # Import existing GPG key
-make decrypt-states      # Decrypt existing state files
-```
+- All state files and secrets are encrypted using SOPS
+- OpenTofu natively supports SOPS encryption without manual steps
+- Files are automatically encrypted/decrypted during operations
+- Use your preferred SOPS key management (Age, PGP, AWS KMS, etc.)
 
 ### Secrets Management
 
 - Environment-specific secrets in `tfvars/*.secrets.tfvars`
-- Secrets files are in `.gitignore` and never committed
+- All secrets files are SOPS encrypted
 - Templates provided for easy setup
 - Automatic validation ensures secrets exist before operations
 
-## 🖥️ Shell Completion
+## 🔄 Typical Workflows
 
-The project includes intelligent shell completion for both bash and zsh:
+### First Time Setup
 
-### Features
-- ✅ Complete all Makefile targets
-- ✅ Complete environment names (`production`, `staging`, `development`)
-- ✅ Complete OpenTofu subcommands for `make tofu`
-- ✅ Context-aware completion (knows when to suggest `ENV=`)
+```bash
+export TERRAFORM_ENV=production
+make setup-secrets && make setup-variables
+make edit-secrets && make edit-variables
+make init && make plan && make apply
+```
 
+### Daily Development
+
+```bash
+export TERRAFORM_ENV=development
+make plan
+make apply
+```
+
+### Production Deployment
+
+```bash
+export TERRAFORM_ENV=production
+make plan  # Carefully review all changes
+make apply
+git add . && git commit -m "Deploy to production" && git push
+```
+
+## 🚨 Important Notes
+
+- **OpenTofu Required**: SOPS encryption requires OpenTofu, not standard Terraform
+- **SOPS Setup**: Ensure SOPS is properly configured with your key management
+- **Always** review `make plan` output before `make apply`
+- All sensitive files are automatically SOPS encrypted
+- Pre-commit hooks prevent committing unencrypted sensitive files
+
+## 📚 Documentation
+
+- Run `make help` for complete command reference
+- See `tf/completion/README.md` for autocompletion details
+- Check individual module documentation in `tf/modules/*/README.md`
+
+## 🤝 Contributing
+
+1. Create feature branch
+2. Test changes in development environment
+3. Update documentation if needed
+4. Ensure all state files are encrypted before committing
+5. Submit pull request
+
+## 📄 License
+
+See `tf/LICENSE` for license information.
 ### Installation
 ```bash
 cd tf/completion

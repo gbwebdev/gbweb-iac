@@ -1,0 +1,7 @@
+repos:
+  - repo: local
+    hooks:
+      - id: forbid-unencrypted-tfstate
+        name: Forbid unencrypted tfstate (use OpenTofu)
+        entry: bash -c 'grep -RIl --exclude-dir=.git --include="*.tfstate" "\"version\"" . >/dev/null && { echo "Found *plaintext* tfstate. Use OpenTofu encryption."; exit 1; } || exit 0'
+        language: system

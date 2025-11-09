@@ -1,0 +1,36 @@
+# .sops.yaml (repo root)
+
+# Define once (anchor)
+recipients: &recipients
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP0YSN9LnJN09PNG0cBa3quStOaSlv9Hyp2+PQDL0MD1 gbwebdev@github/60953839 # ssh-import-id gh:gbwebdev
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMENiGNM4RyfklfW9ZlJix9zYbifWyTVaRYY08HbZ2wL gbwebdev@github/62232576 # ssh-import-id gh:gbwebdev
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFXZ9OLEwcxzuMPXYJyhNBDnawJvXCwQZLm28kZ0flxJ guillaume@LP-Guillaume
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO9kGZmoqzzsSi/l2rbS8uGtPEFD3P5xd5TVi5ejtnj guillaume@PC-Guillaume
+creation_rules:
+  # YAML / JSON (encrypt all values)
+  - path_regex: '(.+)\.(ya?ml|json)(\.sec)?$'
+    encrypted_regex: '^(.*)$'
+    key_groups:
+      - age: *recipients
+    mac: 'ENC'
+
+  # Terraform vars (prefer .tfvars.json)
+  - path_regex: '(.+)\.tfvars\.json$'
+    encrypted_regex: '^(.*)$'
+    key_groups:
+      - age: *recipients
+    mac: 'ENC'
+
+  # dotenv / INI
+  - path_regex: '(.+)\.(env|ini)$'
+    encrypted_regex: '^(.*)$'
+    key_groups:
+      - age: *recipients
+    mac: 'ENC'
+  
+  # Fichiers de clés dédiées au state Tofu : on chiffre le(s) champ(s) clé(s)
+  - path_regex: '^keys/tofu-.*\.sops\.yaml$'
+    encrypted_regex: '^(tofu_state_key_base64)$'
+    key_groups:
+      - age: *recipients
+    mac: 'ENC'

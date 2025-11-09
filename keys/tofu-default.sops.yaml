@@ -1,0 +1,47 @@
+tofu_state_key_base64: ENC[AES256_GCM,data:xxtEHlQKxWD/9uSNr5MaLOsfd0mGeL0DRdhNZqvrQTJY5+6/lrUWMLnXukQ=,iv:Js3rMI38UseWZi3m90bKPFRq3ybrCO3uC9x7ATo4Q5Q=,tag:8Sw6SAxjrXGOFD+i6Zz4dw==,type:str]
+sops:
+    age:
+        - recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP0YSN9LnJN09PNG0cBa3quStOaSlv9Hyp2+PQDL0MD1 gbwebdev@github/60953839
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IDNTK1A1dyBXbWJ1
+            VHI0dEtMVFBmSWVld0ZQVThibkdHSkZQbGZnd0ZFTFZjWHAvZkhNCmRDNlBTQm91
+            WTV1czIxcnFWWkJqY2ZLMjdudk1BelA2RjRWNStqQU1SZUkKLS0tIDk1dEhHRXRO
+            VWR5WmFvRS9HWHlvL1ZmSFltLzNiRlFCb2pzSGZ0dzJHNk0KcVNEWOKeig1cpuy/
+            W5+arl5Y8WzBtpqTxBSc7Uu8msFP+DrXqacCXxPu83twGiQ++rzLbE3k/2e8yw3J
+            EL7ShQ==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMENiGNM4RyfklfW9ZlJix9zYbifWyTVaRYY08HbZ2wL gbwebdev@github/62232576
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IDVMYVFkQSBTUWVN
+            WUFoREROMVhPYVFZblBNOFkrNTZNaWIyb05yTjR0VndZSjEzaFJJCjh5aG8wdUN3
+            OHczemZUSXBocFdvZFRKQjZpbnVmVFJ1OVc3RDRxemRMVFkKLS0tIGpQZERCYzBS
+            RU9rRDlWV3dFM1QwVStLYm5rM294TEJONWVVQ0xLY1o2MWcK84ZfRrQtOTyiYhbu
+            fzN1GJVQEU3ZSX1cMVgTbKtlRLZwiI8AcqdiqcGxIKZwJ9Y/bhY8FDPjkxXFGyUa
+            SJ1Ctw==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFXZ9OLEwcxzuMPXYJyhNBDnawJvXCwQZLm28kZ0flxJ guillaume@LP-Guillaume
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IHJsYTgzQSBVdUNj
+            a09zL0d2TEVCMDh2Sk85bFBBWmpnRVFtS1Y1SzZRUHdoaGFVbkFnCkJmSVpvdjRZ
+            bi91UGp6bzN1Nzd5WDRFTFRhYnIzNktjc1NhSkZ0Nm9oMmMKLS0tIHlhNFFtNWdq
+            aEU0WlBlTTJiMTVMK1MzQlpaYzMwK0VNU09nZHNuUUZDOEEKXOPsbtu+pAAJ51In
+            2BcoX+iPixpjmPEJ+H8j76cAiZPQlCREPYLTAecycyrIczY7E6zNZNcxlcF3SwAt
+            7OtkKg==
+            -----END AGE ENCRYPTED FILE-----
+        - recipient: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO9kGZmoqzzsSi/l2rbS8uGtPEFD3P5xd5TVi5ejtnj guillaume@PC-Guillaume
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNzaC1lZDI1NTE5IEt0VDNHZyBFQWYy
+            Wm5nNFZGVW8rU0JYMzR5QUtrNE1OS0VSNHpzcmtaK0p5WjBzTW5ZClpSalQvUllZ
+            TlZFSDVKVVJjV2Q5cDdNY2c5NlRiVlZSMitzVDJETHBMRE0KLS0tIDMwNUVMdVk4
+            WjIrODl1TjE1OC81M3kwSHI2dzVXTlowRVdEK1hDQk91WDQKgtmTdU4wqd8TZ7Iw
+            GlpVrh4swBi4DFXCdmLvSnhoem4oWK1ZcTRFIOBHYG1cOjY9rjboLcXvu6AFX4SP
+            V0+CqQ==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-11-09T17:56:52Z"
+    mac: ENC[AES256_GCM,data:9sKTdcpIFwzLom+2CrUn1xAKQp2cXjd3i1NP2pB9entdJFTqAPQMRIjL/xzZFtDbvjjPHbkQEb2LBfCedSEhOL3no3ZtlkEYSPUmbfZz+u9t5UG+Iky44SZ5baq/Ahl94lvPj08+MlN5C1nuHaGr7GeiUuC/5OTbo2wmHKYjI1E=,iv:Syse40axHkZzqOUAqHHa6CEhBLgAOZWQe6w+fMM4I60=,tag:fRJ5Cv0ZXMW7G2/amqNQpQ==,type:str]
+    encrypted_regex: ^(.*)$
+    version: 3.11.0

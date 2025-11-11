@@ -1,21 +1,17 @@
 # Ansible Infrastructure Management
 
-This directory contains Ansible configuration for managing your Hetzner VPS infrastructure. The setup includes automated Python environment management, encrypted secrets handling, and simplified operations through a comprehensive Makefile.
+This directory contains Ansible configuration for managing your Hetzner VPS infrastructure. The setup includes automated Python environment management, SOPS-encrypted secrets handling, and simplified operations through a comprehensive Makefile.
 
 ## 🚀 Quick Start
 
 ### 1. Initial Setup
 
 ```bash
-# Create Python virtual environment and install Ansible
+# Create Python virtual environment and install Ansible + SOPS
 make venv-create
 
-# Create vault password file
-make init-vault-password
-# Then edit .vault-password-file with your actual password
-
-# Create and edit your first vault file
-make vault-edit
+# Configure SOPS (if not already done)
+# Set up your GPG key or cloud KMS for SOPS encryption
 ```
 
 ### 2. Test Connection
@@ -29,65 +25,82 @@ make ping
 
 ```
 ansible/
-├── Makefile                    # Main automation and task runner
-├── inventory.yml              # Static server inventory (FQDN-based)
-├── .vault-password-file       # Vault password (git-ignored)
-├── group_vars/all/vault.yml   # Encrypted secrets
-├── venv/                      # Python virtual environment (auto-created)
-└── README.md                  # This file
+├── Makefile                       # Main automation and task runner
+├── inventory.yml                 # Static server inventory (FQDN-based)
+├── group_vars/all/secrets.yml    # SOPS-encrypted secrets
+├── .sops.yaml                    # SOPS configuration (optional)
+├── venv/                         # Python virtual environment (auto-created)
+└── README.md                     # This file
 ```
 
 ## 🐍 Python Environment Management
 
-The Makefile automatically manages Python virtual environments:
+The Makefile **requires** a Python virtual environment - no system fallback:
 
 ### Commands
-- `make venv-create` - Create virtual environment with Ansible
+- `make venv-create` - Create virtual environment with Ansible and community.sops
 - `make venv-check` - Check virtual environment status
-- All Ansible commands automatically use the venv if available
+- **All Ansible commands require the venv to exist**
 
 ### Features
-- ✅ **Auto-detection**: Automatically uses venv if present
-- ✅ **Interactive setup**: Prompts to create venv when missing
-- ✅ **Fallback support**: Works with system Ansible if no venv
-- ✅ **Status display**: Shows venv status in help
+- ✅ **Mandatory venv**: All commands fail if venv doesn't exist
+- ✅ **Simple setup**: One command creates everything needed
+- ✅ **SOPS Integration**: Installs community.sops collection automatically
+- ✅ **No confusion**: Always uses the same Python environment
+- ✅ **Clear errors**: Helpful error messages when venv is missing
 
-## 🔐 Vault Management
-
-Secure secret management with Ansible Vault:
-
-### Commands
+### How It Works
 ```bash
-# Default vault (group_vars/all/vault.yml)
-make vault-edit
-make vault-view
+# First time setup - REQUIRED
+make venv-create
 
-# Custom vault files (positional arguments)
-make vault-edit secrets.yml
-make vault-edit environments/production.vault
-make vault-view host_vars/server/secrets.yml
+# All commands require venv to exist
+make ping              # ✅ Works with venv
+                      # ❌ Fails without venv
 
-# Encryption operations
-make vault-encrypt custom.vault
-make vault-decrypt temp.vault
-make check-vault-password
+# Check if venv exists
+make venv-check
 ```
 
-### Features
-- ✅ **Auto-creation**: Creates vault files and directories if needed
-- ✅ **Flexible paths**: Works with any vault file location
-- ✅ **Template generation**: Pre-populates new vault files
-- ✅ **Password validation**: Test vault password functionality
+## 🔐 SOPS Encryption Management
 
-### Vault File Template
-New vault files are created with this template:
+Secure secret management with Mozilla SOPS - **use SOPS directly, no wrapper needed**:
+
+### Direct SOPS Commands (Recommended)
+```bash
+# Edit encrypted secrets
+sops group_vars/all/secrets.yml
+
+# View secrets (decrypted, read-only)
+sops -d group_vars/all/secrets.yml
+
+# Create new encrypted file
+sops secrets.yml
+
+# Encrypt existing file
+sops -e -i plaintext.yml
+
+# Decrypt to stdout
+sops -d secrets.yml
+```
+
+### Why Direct SOPS?
+- ✅ **KISS Principle**: No unnecessary wrapper complexity
+- ✅ **Standard Commands**: Learn SOPS properly, not custom wrappers
+- ✅ **Full Feature Access**: Access all SOPS options directly
+- ✅ **Less Maintenance**: One less layer to maintain
+
+### SOPS File Template
+Create your first secret file:
+```bash
+# Create and edit in one command
+sops group_vars/all/secrets.yml
+```
+
+Add this content:
 ```yaml
-# Ansible Vault - Encrypted Variables
-# Add your secrets here
-
-# SSH configuration
+# SOPS Encrypted Variables
 ssh_port: 22
-
 # Add other secrets as needed
 ```
 
@@ -97,7 +110,7 @@ ssh_port: 22
 - **Host**: `ha-server` (ha-server.gbweb.fr)
 - **User**: `ansible`
 - **SSH Key**: `~/.ssh/id_rsa`
-- **Vault Variables**: SSH port from encrypted vault
+- **SOPS Variables**: SSH port from encrypted secrets
 
 ### Inventory Structure
 ```yaml
@@ -123,6 +136,13 @@ make disk-usage        # Check disk space
 make services          # Check failed systemd services
 ```
 
+### Secret Management
+```bash
+# Direct SOPS usage (recommended)
+sops group_vars/all/secrets.yml        # Edit secrets
+sops -d group_vars/all/secrets.yml     # View secrets
+```
+
 ### Playbook Execution
 ```bash
 make setup             # Run setup.yml if it exists
@@ -136,29 +156,28 @@ make playbook PLAY=security-hardening
 ### Advanced Operations
 ```bash
 make shell HOST=ha-server    # Open interactive shell
-make test                    # Run vault + ping test
+make test                    # Run ping test
 make up                      # Alias for ping
 make status                  # Alias for facts
 ```
 
 ## 🔧 Configuration Files
 
-### .vault-password-file
-Store your vault password securely:
-```bash
-# Create template
-make init-vault-password
-
-# Edit with your password
-nano .vault-password-file
-chmod 600 .vault-password-file
+### .sops.yaml (Optional)
+Configure SOPS encryption rules:
+```yaml
+creation_rules:
+  - path_regex: \.secrets\.ya?ml$
+    pgp: 'your-pgp-fingerprint'
+  - path_regex: \.secrets\.ya?ml$
+    kms: 'arn:aws:kms:region:account:key/key-id'
 ```
 
 ### Makefile Variables
 Key configuration in the Makefile:
 ```makefile
 INVENTORY := inventory.yml
-VAULT_PASSWORD_FILE := .vault-password-file
+SOPS_FILE := group_vars/all/secrets.yml
 VENV_DIR := venv
 PYTHON := python3
 ```
@@ -178,12 +197,16 @@ The Makefile provides beautiful, color-coded output:
 # 1. Create environment
 make venv-create
 
-# 2. Setup vault password
-make init-vault-password
-echo "my-secret-password" > .vault-password-file
+# 2. Setup SOPS (choose one method)
+# Option A: GPG
+gpg --generate-key
+export SOPS_PGP_FP="your-pgp-fingerprint"
 
-# 3. Configure secrets
-make vault-edit
+# Option B: AWS KMS
+export SOPS_KMS_ARN="arn:aws:kms:region:account:key/key-id"
+
+# 3. Configure secrets (direct SOPS usage)
+sops group_vars/all/secrets.yml
 # Add: ssh_port: 2222
 
 # 4. Test connection
@@ -199,8 +222,8 @@ make disk-usage
 # Deploy changes
 make playbook PLAY=deploy
 
-# Update secrets
-make vault-edit production.vault
+# Update secrets (direct SOPS usage)
+sops production.secrets.yml
 ```
 
 ### Troubleshooting
@@ -208,43 +231,64 @@ make vault-edit production.vault
 # Check environment
 make help                    # Shows all status info
 make venv-check             # Check Python environment
-make check-vault-password   # Test vault access
 
 # Debug connection
 make facts                  # Detailed server info
 make shell HOST=ha-server   # Direct server access
+
+# Test SOPS directly
+sops -d group_vars/all/secrets.yml    # View encrypted secrets
 ```
 
-## 🔒 Security Best Practices
+## 🔒 SOPS Configuration
 
-### Vault Password Management
-- ✅ Store vault password in `.vault-password-file`
-- ✅ Never commit vault passwords to git
-- ✅ Use strong, unique passwords for production
-- ✅ Regularly rotate vault passwords
+### Encryption Methods
 
-### SSH Configuration
-- ✅ Use SSH keys instead of passwords
-- ✅ Configure custom SSH ports in vault
-- ✅ Limit SSH access with `ansible` user
-- ✅ Use `StrictHostKeyChecking=no` only for initial setup
-
-### File Permissions
+**GPG (Local Development)**
 ```bash
-chmod 600 .vault-password-file
-chmod 644 inventory.yml
-chmod 600 ~/.ssh/id_rsa
+# Generate GPG key
+gpg --generate-key
+
+# Get fingerprint
+gpg --list-secret-keys --keyid-format LONG
+
+# Set environment variable
+export SOPS_PGP_FP="your-pgp-fingerprint"
 ```
+
+**AWS KMS (Production)**
+```bash
+# Set KMS key ARN
+export SOPS_KMS_ARN="arn:aws:kms:us-east-1:123456789:key/key-id"
+
+# Or create .sops.yaml
+echo 'creation_rules:
+  - kms: "arn:aws:kms:us-east-1:123456789:key/key-id"' > .sops.yaml
+```
+
+**Multiple Keys (Team Setup)**
+```yaml
+# .sops.yaml
+creation_rules:
+  - path_regex: \.secrets\.ya?ml$
+    pgp: >-
+      fingerprint1,
+      fingerprint2,
+      fingerprint3
+    kms: arn:aws:kms:region:account:key/key-id
+```
+
+### File Naming Convention
+- ✅ `*.secrets.yml` - Encrypted secret files
+- ✅ `group_vars/all/secrets.yml` - Default secrets
+- ✅ `host_vars/hostname/secrets.yml` - Host-specific secrets
+- ✅ `environments/prod.secrets.yml` - Environment secrets
 
 ## 🚨 Git Integration
 
 ### Files to Ignore
 Add to `.gitignore`:
 ```gitignore
-# Ansible secrets
-.vault-password-file
-*.vault-password*
-
 # Python environment
 venv/
 __pycache__/
@@ -252,12 +296,19 @@ __pycache__/
 # Ansible artifacts
 *.retry
 .ansible_async_*
+
+# Local SOPS keys (if using files)
+.sops/
+
+# Temporary decrypted files
+*.decrypted.*
 ```
 
 ### Files to Commit
 - ✅ `Makefile`
 - ✅ `inventory.yml`
-- ✅ `group_vars/all/vault.yml` (encrypted)
+- ✅ `group_vars/all/secrets.yml` (SOPS encrypted)
+- ✅ `.sops.yaml` (SOPS configuration)
 - ✅ Playbook files (`*.yml`)
 - ✅ `README.md`
 
@@ -265,33 +316,16 @@ __pycache__/
 
 ### Common Issues
 
-**Virtual Environment Problems**
+**SOPS Problems**
 ```bash
-# Recreate environment
-rm -rf venv
-make venv-create
-```
+# Check SOPS configuration
+sops --version
 
-**Connection Issues**
-```bash
-# Check inventory
-cat inventory.yml
+# Test decryption directly
+sops -d group_vars/all/secrets.yml
 
-# Test SSH manually
-ssh -p 22 ansible@ha-server.gbweb.fr
-
-# Check vault variables
-make vault-view
-```
-
-**Vault Problems**
-```bash
-# Test password
-make check-vault-password
-
-# Re-encrypt vault
-make vault-decrypt
-make vault-encrypt
+# Re-encrypt if needed
+sops updatekeys group_vars/all/secrets.yml
 ```
 
 ### Getting Help
@@ -299,6 +333,7 @@ make vault-encrypt
 ```bash
 make help              # Show all available commands
 make venv-check        # Environment diagnostics
+sops --help           # SOPS commands
 ```
 
 ## 🎯 Next Steps
@@ -306,16 +341,18 @@ make venv-check        # Environment diagnostics
 1. **Create Playbooks**: Add `setup.yml`, `deploy.yml`, etc.
 2. **Expand Inventory**: Add more hosts as infrastructure grows
 3. **Role Organization**: Create `roles/` directory for reusable components
-4. **Environment Separation**: Create separate vault files per environment
+4. **Environment Separation**: Create separate SOPS files per environment
 5. **CI/CD Integration**: Use Makefile targets in automated pipelines
+6. **Key Rotation**: Set up regular SOPS key rotation
 
 ## 📚 Additional Resources
 
+- [SOPS Documentation](https://github.com/mozilla/sops)
+- [community.sops Collection](https://docs.ansible.com/ansible/latest/collections/community/sops/)
 - [Ansible Documentation](https://docs.ansible.com/)
-- [Ansible Vault Guide](https://docs.ansible.com/ansible/latest/user_guide/vault.html)
 - [SSH Key Management](https://docs.ansible.com/ansible/latest/user_guide/connection_details.html#ssh-key-setup)
 - [Inventory Best Practices](https://docs.ansible.com/ansible/latest/user_guide/intro_inventory.html)
 
 ---
 
-**Happy Automating! 🚀**
+**Happy Automating with SOPS! 🚀🔐**

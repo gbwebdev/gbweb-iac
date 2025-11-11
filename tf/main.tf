@@ -32,7 +32,6 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token  
 }
 
-
 # Local values for workspace-aware naming
 locals {
   workspace_suffix = (terraform.workspace == "default" || terraform.workspace == "production") ? "" : "-${terraform.workspace}"

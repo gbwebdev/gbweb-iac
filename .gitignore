@@ -7,3 +7,6 @@ venv/
 # Terraform state encryption key
 .terraform-state-key.asc
 *.asc
+
+
+.decrypted*

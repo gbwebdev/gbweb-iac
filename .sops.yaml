@@ -2,10 +2,7 @@
 
 # Define once (anchor)
 recipients: &recipients
-  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP0YSN9LnJN09PNG0cBa3quStOaSlv9Hyp2+PQDL0MD1 gbwebdev@github/60953839 # ssh-import-id gh:gbwebdev
-  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMENiGNM4RyfklfW9ZlJix9zYbifWyTVaRYY08HbZ2wL gbwebdev@github/62232576 # ssh-import-id gh:gbwebdev
-  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFXZ9OLEwcxzuMPXYJyhNBDnawJvXCwQZLm28kZ0flxJ guillaume@LP-Guillaume
-  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILO9kGZmoqzzsSi/l2rbS8uGtPEFD3P5xd5TVi5ejtnj guillaume@PC-Guillaume
+  - age1xpcejmetxh5une6hp9dkpvqte0py8ujkym8ks3k3w5fuy802ae6q2c8sj9
 creation_rules:
   # YAML / JSON (encrypt all values)
   - path_regex: '(.+)\.(ya?ml|json)(\.sec)?$'

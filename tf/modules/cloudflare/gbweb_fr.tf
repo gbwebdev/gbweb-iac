@@ -14,7 +14,7 @@ resource "cloudflare_dns_record" "hetzner_ha_server_a_record" {
   # We should switch to a 60s TTL one or two days before redeploying the server.
   type = "A"
   proxied = false
-  comment = "Managed by Terraform"
+  comment = "Managed by OpenTofu"
 }
 
 resource "cloudflare_dns_record" "home_a_record" {
@@ -24,7 +24,7 @@ resource "cloudflare_dns_record" "home_a_record" {
   content = var.home_ipv4
   ttl = 1 # Default Cloudflare TTL
   proxied = true
-  comment = "Managed by Terraform"
+  comment = "Managed by OpenTofu"
 }
 
 resource "cloudflare_dns_record" "home_aaaa_record" {
@@ -34,7 +34,7 @@ resource "cloudflare_dns_record" "home_aaaa_record" {
   content = var.home_server_ipv6
   ttl = 1 # Default Cloudflare TTL
   proxied = true
-  comment = "Managed by Terraform"
+  comment = "Managed by OpenTofu"
 }
 
 # resource "cloudflare_dns_record" "ionos_gateway_vps_a_record" {
@@ -45,7 +45,7 @@ resource "cloudflare_dns_record" "home_aaaa_record" {
 #   # We should switch to a 60s TTL one or two days before redeploying the server.
 #   type = "A"
 #   proxied = false
-#   comment = "Managed by Terraform"
+#   comment = "Managed by OpenTofu"
 # }
 
 # resource "cloudflare_dns_record" "ionos_gateway_vps_aaaa_record" {
@@ -56,7 +56,7 @@ resource "cloudflare_dns_record" "home_aaaa_record" {
 #   # We should switch to a 60s TTL one or two days before redeploying the server.
 #   type = "AAAA"
 #   proxied = false
-#   comment = "Managed by Terraform"
+#   comment = "Managed by OpenTofu"
 # }
 
 resource "cloudflare_dns_record" "test_app_cname_record" {
@@ -66,6 +66,6 @@ resource "cloudflare_dns_record" "test_app_cname_record" {
   ttl = 1 # Default Cloudflare TTL
   type = "CNAME"
   proxied = true
-  comment = "Managed by Terraform"
+  comment = "Managed by OpenTofu"
 }
 

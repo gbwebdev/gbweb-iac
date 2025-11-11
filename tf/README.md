@@ -1,168 +1,142 @@
-# OpenTofu Infrastructure
+# 🏗️ OpenTofu (Terraform) Infra
 
-This directory contains the OpenTofu configuration for managing cloud infrastructure with SOPS encryption.
+This directory contains the **OpenTofu** + **Terragrunt** configuration for my infrastructure.  
+It manages Cloudflare DNS, Hetzner cloud resources, and other components in a secure, fully reproducible way.
 
-## 🏗️ Architecture Overview
+## 🧩 Requirements
 
-The infrastructure is organized into modular components:
+These tools must be installed locally or in your CI environment:
 
-- **Root Configuration** (`main.tf`): Orchestrates the overall infrastructure
-- **Hetzner Module** (`modules/hetzner/`): Manages Hetzner Cloud VPS, storage, networking, and security
-- **Cloudflare Module** (`modules/cloudflare/`): Handles DNS and CDN configuration (currently commented out)
+| Component | Purpose | Minimum version | Install hint |
+|------------|----------|-----------------|---------------|
+| **[OpenTofu](https://opentofu.org/)** | Terraform-compatible IaC engine | ≥ 1.6 | `sudo apt install opentofu` or download binary |
+| **[Terragrunt](https://terragrunt.gruntwork.io/)** | Wrapper for orchestration, hooks & envs | ≥ 0.58 | `go install github.com/gruntwork-io/terragrunt@latest` |
+| **[SOPS](https://github.com/getsops/sops)** | Encrypt/decrypt secrets | ≥ 3.8 | `sudo apt install sops` |
+| **[Age](https://github.com/FiloSottile/age)** | Encryption backend for SOPS | ≥ 1.1 | `sudo apt install age` |
+| **jq** | Lightweight JSON processor (for hooks/tests) | ≥ 1.6 | `sudo apt install jq` |
+| **bash** | Required for Terragrunt hooks | any | built-in on Linux |
 
-## 📁 Directory Structure
 
-```text
+## 🔐 Security Principles
+
+- **State & plan encryption** — every `terraform.tfstate` and `plan` file is AES-GCM encrypted using OpenTofu’s native encryption mechanism.  
+  Keys are managed via **SOPS** and stored in `./keys/*.sops.yaml`.
+- **Secrets encryption** — all sensitive variables (API tokens, passwords, etc.) are kept in SOPS-encrypted files using **Age** recipients.
+- **Zero plaintext state guarantee** — a Terragrunt hook verifies that no unencrypted state file is ever produced.
+- **Ephemeral decryption** — secrets are decrypted in-memory during `plan` / `apply`, never written to disk.
+
+
+## 🗂️ Directory Structure
+
+```
+
 tf/
-├── main.tf                       # Root OpenTofu configuration
-├── variables.tf                  # Input variables definition
-├── outputs.tf                    # Output values
-├── Makefile                      # Automation scripts for common tasks
+├── encryption.tf                  # OpenTofu encryption configuration
+├── environments/
+│   ├── dev/
+│   │   ├── dev.tfvars.json        # non-sensitive variables
+│   │   └── dev.secrets.sops.tfvars.json  # encrypted secrets
+│   └── prod/
+│       ├── prod.tfvars.json
+│       └── prod.secrets.sops.tfvars.json
+├── keys/
+│   └── tofu-default.sops.yaml     # encrypted state-encryption key
 ├── modules/
-│   ├── hetzner/                  # Hetzner Cloud infrastructure module
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── cloud-init.yml.tpl
-│   └── cloudflare/               # Cloudflare DNS/CDN module
-├── tfvars/                       # Environment-specific variables
-│   ├── _.tfvars.example          # Template for regular variables
-│   ├── _secrets.tfvars.example   # Template for sensitive variables
-│   ├── production.tfvars         # Production environment variables
-│   └── production.secrets.tfvars # Production secrets (SOPS encrypted)
-└── terraform.tfstate.d/          # Workspace-specific state files (SOPS encrypted)
+│   ├── cloudflare/                # DNS & domain management
+│   └── hetzner/                   # VM provisioning, cloud-init templates
+├── scripts/
+│   └── tofu-sops-key.sh           # external key provider for OpenTofu
+├── terragrunt.hcl                 # orchestration, inputs, and hooks
+├── main.tf                        # root OpenTofu configuration
+├── variables.tf                   # variable declarations
+├── outputs.tf                     # useful outputs
+└── terraform.tfstate.d/           # encrypted states per workspace
+
 ```
 
-## 🚀 Quick Start
+## 🚀 Workflow
 
-### Prerequisites
+### 1️⃣ Setup
 
-- [OpenTofu](https://opentofu.org) >= 1.6 (required for SOPS support)
-- [SOPS](https://github.com/mozilla/sops) for encryption
-- [Hetzner Cloud](https://www.hetzner.com/cloud) account and API token
-- SSH key pair for server access
-
-### 1. Initial Setup
+Install dependencies:
 
 ```bash
-# Navigate to the tf directory
-cd tf
-
-# Set up variables and secrets from templates
-make setup-variables
-make setup-secrets
-
-# Edit your environment-specific configuration
-make edit-variables ENV=production
-make edit-secrets ENV=production    # Will use SOPS for encryption
+sudo apt install opentofu terragrunt jq
+# and ensure SOPS + AGE are installed:
+sudo apt install sops age
 ```
 
-### 2. Configure Your Infrastructure
-
-Edit the generated files in `tfvars/`:
-
-**production.tfvars**:
-
-```hcl
-project_name = "your-project"
-environment  = "production"
-domain       = "yourdomain.com"
-hetzner_server_name = "web-server"
-hetzner_server_type = "cx22"
-hetzner_data_volume_size = 10
-```
-
-**production.secrets.tfvars** (SOPS encrypted):
-
-```hcl
-hetzner_token = "your-hetzner-api-token"
-ssh_public_keys = ["ssh-ed25519 AAAAC... your-key"]
-ssh_allowed_ips = ["your.ip.address/32"]
-```
-
-### 3. Deploy Infrastructure
+Create an Age key (once per user):
 
 ```bash
-# Initialize OpenTofu
-make init ENV=production
-
-# Review the planned changes
-make plan ENV=production
-
-# Apply the configuration
-make apply ENV=production
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 ```
 
-## 🔐 Security Features
-
-### SOPS Encryption
-
-- All state files and secrets are automatically encrypted with SOPS
-- OpenTofu handles encryption/decryption transparently
-- No manual encryption/decryption steps required
-- Configure SOPS with your preferred key management system
-
-### Access Control
-
-- SSH access restricted to specified IP addresses
-- Configurable SSH port
-- Firewall rules for web traffic (HTTPS)
-
-### Secrets Management
-
-- Sensitive variables stored in SOPS-encrypted `.secrets.tfvars` files
-- Templates provided for easy setup
-- Automatic encryption when editing secrets
-
-## 🌍 Multi-Environment Support
-
-The infrastructure supports multiple environments through OpenTofu workspaces:
+### 2️⃣ Initialize
 
 ```bash
-# Create a new environment
-tofu workspace new staging
-
-# Deploy to staging
-make init ENV=staging
-make apply ENV=staging
+export TF_WORKSPACE=prod     # or dev, staging, etc.
+terragrunt init
 ```
 
-Each environment has its own:
+### 3️⃣ Plan & Apply
 
-- Variable files (`<env>.tfvars`, `<env>.secrets.tfvars`)
-- State files (in `terraform.tfstate.d/<env>/`, SOPS encrypted)
-- Resource naming (includes workspace suffix)
-
-## ⚠️ Important Notes
-
-1. **OpenTofu Required**: SOPS encryption requires OpenTofu, not standard Terraform
-2. **SOPS Configuration**: Ensure SOPS is properly configured with your encryption keys
-3. **API Tokens**: Keep your Hetzner API token secure and rotate it regularly
-4. **SSH Access**: Restrict SSH access to known IP addresses only
-5. **Cost Monitoring**: Monitor your Hetzner Cloud usage to avoid unexpected charges
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**SOPS Configuration**:
 ```bash
-# Verify SOPS is properly configured
-sops --version
-sops -e /dev/null  # Test encryption setup
+terragrunt plan
+terragrunt apply
 ```
 
-**State Lock Error**:
+Terragrunt automatically:
+
+* merges clear vars (`environments/<ws>/<ws>.tfvars.json`) and secrets (`.sops.tfvars.json`),
+* decrypts secrets in memory using SOPS,
+* enforces encrypted state and plan outputs.
+
+### 4️⃣ Import existing resources
+
 ```bash
-# If state is locked, check and remove if necessary
-tofu force-unlock <lock-id>
+terragrunt import <RESOURCE_ADDRESS> <RESOURCE_ID>
+# Example:
+terragrunt import module.cloudflare.cloudflare_zone.gbweb_fr ZONE_ID
 ```
 
-**Provider Authentication**:
+## 🔁 Rotating Encryption Keys
+
+When rotating Age keys:
+
 ```bash
-# Verify your Hetzner token is correct
-export HCLOUD_TOKEN="your-token"
-hcloud server list
+sops updatekeys -r .
 ```
 
-For more detailed troubleshooting, check the OpenTofu and provider documentation.
+## 🛡️ Safety Hooks
+
+* `assert_no_plaintext_state` — checks every run for any unencrypted state.
+* Fails the pipeline immediately if plaintext is detected.
+
+
+## 🧰 Useful Commands
+
+| Task                        | Command                                                                    |
+| --------------------------- | -------------------------------------------------------------------------- |
+| Initialize                  | `terragrunt init`                                                          |
+| Plan changes                | `terragrunt plan`                                                          |
+| Apply changes               | `terragrunt apply`                                                         |
+| List resources              | `terragrunt state list`                                                    |
+| Show resource               | `terragrunt state show <address>`                                          |
+| Re-encrypt all secrets      | `sops updatekeys -r .`                                                     |
+| Check if state is encrypted | `jq -e 'has("encrypted_data")' terraform.tfstate.d/prod/terraform.tfstate` |
+
+
+## 🧩 Design Notes
+
+* **Terragrunt** provides environment isolation, variable merging, and hooks for security checks.
+* **OpenTofu** ensures encrypted state and compatibility with Terraform HCL.
+* **SOPS + Age** handle all secret management simply and transparently.
+* **No Makefile required** — one consistent workflow via Terragrunt.
+
+
+## 📜 License
+
+This project is licensed under the [MIT License](./LICENSE).

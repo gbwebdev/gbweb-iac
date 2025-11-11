@@ -1,4 +1,6 @@
 apps:
-  - name: test-app
+  test-app:
+    name: test-app
+    instance: sec
     repo: https://github.com/gbwebdev/gbweb-public-apps--test-app.git
     ref: main

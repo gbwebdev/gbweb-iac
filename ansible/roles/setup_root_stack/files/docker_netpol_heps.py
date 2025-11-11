@@ -60,6 +60,7 @@ def generate_hep_manifest(network: Dict[str, Any], node_name: str) -> Dict[str, 
         return None
     
     app_name = labels.get('netpol.app', 'unknown')
+    app_id = labels.get('netpol.app_id', 'unknown')
     role_name = labels.get('netpol.role', 'unknown')
     
     hep_manifest = {
@@ -69,6 +70,7 @@ def generate_hep_manifest(network: Dict[str, Any], node_name: str) -> Dict[str, 
             'name': bridge_name,
             'labels': {
                 'app': app_name,
+                'app-id': app_id,
                 'role': role_name
             }
         },
@@ -88,29 +90,25 @@ def generate_hep_manifest(network: Dict[str, Any], node_name: str) -> Dict[str, 
 
 
 def apply_hep_manifest(manifest: Dict[str, Any], dry_run: bool = False) -> bool:
-    """Apply a HostEndpoint manifest using docker compose run calicoctl."""
+    """Apply a HostEndpoint manifest using the apply_calico_manifests.sh helper."""
     try:
         # Convert manifest to YAML string
         manifest_yaml = yaml.dump(manifest, default_flow_style=False)
         
-        # Apply using docker compose run calicoctl service
-        cmd = [
-            'docker', 'compose', 'run', '--rm', '-T',
-            'calicoctl'
-        ]
+        # Use the helper script
+        cmd = ['/usr/local/bin/apply_calico_manifests.sh']
         
         if dry_run:
-            cmd.extend(['apply', '-f', '-', '--dry-run'])
-        else:
-            cmd.extend(['apply', '-f', '-', '--allow-version-mismatch'])
+            cmd.append('--dry-run')
+        
+        # Don't add '-' explicitly - let the script default to stdin when no args
         
         result = subprocess.run(
             cmd, 
             input=manifest_yaml, 
             capture_output=True, 
             text=True, 
-            check=True,
-            cwd='/etc/manifests/docker-compose/system/calico'  # Run from Calico compose directory
+            check=True
         )
         
         return True

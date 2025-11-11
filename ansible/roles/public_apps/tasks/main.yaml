@@ -8,57 +8,50 @@
   loop: ["{{ apps_root }}", "{{ rendered_dir }}", "{{ sets_dir }}"]
   become: true
 
+- name: Register sync date and time
+  ansible.builtin.set_fact:
+    sync_datetime: "{{ ansible_date_time.year }}-{{ ansible_date_time.month }}-{{ ansible_date_time.day }}_{{ ansible_date_time.hour }}-{{ ansible_date_time.minute }}-{{ ansible_date_time.second }}"
+
 - name: Sync app repos
   ansible.builtin.git:
-    repo: "{{ item.repo | default('git@github.com:gbwebdev/gbweb-public-apps--' ~ item.name ~ '.git', true)}}"
-    dest: "{{ apps_root ~ '/' ~ item.id | default(item.name) }}"
-    version: "{{ item.ref }}"
+    repo: "{{ item.value.repo | default('git@github.com:gbwebdev/gbweb-public-apps--' ~ item.value.name ~ '.git', true)}}"
+    dest: "{{ apps_root ~ '/' ~ item.key }}"
+    version: "{{ item.value.ref | default('main') }}"
     force: yes
-  loop: "{{ apps }}"
+  loop: "{{ apps | dict2items }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.value.name | default(item.key) }}"
+  register: git_sync_results
 
-- name: Deploy compose
-  community.docker.docker_compose_v2:
-    project_src: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/compose/' }}"
-    files:
-      - base/compose.yml
-      - "{{ inventory_hostname ~ '/compose.override.yml' }}"
-    project_name: "{{ item.id | default(item.name) }}"
-    state: present
-    pull: always
-  loop: "{{ apps }}"
-  loop_control: { label: "{{ item.name }}" }
-
-
-- name: Generate and apply HostEndpoints from Docker networks
-  command: python3 /usr/local/bin/docker_netpol_heps.py {{ inventory_hostname }} --apply --output-dir {{ rendered_dir }}
-  register: hep_result
-  changed_when: "'applied' in hep_result.stdout"
-
-- name: Show HostEndpoint application results
-  debug:
-    var: hep_result.stdout_lines
-  register: hep_apply
-
-
-- name: Build calico manifests with kustomize
-  ansible.builtin.command:
-    cmd: kustomize build .
-    chdir: "{{ apps_root ~ '/' ~ (item.id | default(item.name)) ~ '/deploy/calico/' ~ inventory_hostname }}"
-  register: kustomized_output
-  loop: "{{ apps }}"
+- name: Deploy synced apps
+  include_tasks: deploy_app.yaml
+  when: git_sync_results is defined
+  loop: "{{ git_sync_results.results }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.item.value.name | default(item.item.key) }}"
+  vars:
+    changed: "{{ item.changed }}"
+    id: "{{ item.item.key }}"
+    ref: "{{ item.item.value.ref | default('main') }}"
+    type: "{{ item.item.value.type | default('public') }}"
+    name: "{{ item.item.value.name | default(item.item.key) }}"
+    compose_path: "{{ apps_root ~ '/' ~ item.item.key ~ '/deploy/compose/' ~ inventory_hostname ~ ('/' ~ instance if instance is defined and instance != '' else '') }}"
+    calico_path: "{{ apps_root ~ '/' ~ item.item.key ~ '/deploy/calico/' ~ inventory_hostname ~ ('/' ~ instance if instance is defined and instance != '' else '') }}"
+    recreate_policy: "{{ item.item.value.recreate_policy | default(global_recreate_policy) }}"
 
-- name: Apply policies with calicoctl (containerized)
-  ansible.builtin.shell: |
-    cd /etc/manifests/docker-compose/system/calico && \
-    echo "{{ item.stdout }}" | \
-    docker compose run --rm -T calicoctl \
-      apply -f - --allow-version-mismatch
-  args:
-    executable: /bin/bash
-  loop: "{{ kustomized_output.results }}"
+- name: Find existing app directories
+  ansible.builtin.find:
+    paths: "{{ apps_root }}"
+    file_type: directory
+    depth: 1
+  register: existing_app_dirs
+
+- name: Clean up removed apps
+  include_tasks: cleanup_app.yaml
+  loop: "{{ existing_app_dirs.files }}"
   loop_control:
-    label: "{{ item.item.name }}"
+    label: "{{ item.path | basename }}"
+  when: item.path | basename not in apps.keys()
+  vars:
+    app_dir: "{{ item.path }}"
+    app_id: "{{ item.path | basename }}"

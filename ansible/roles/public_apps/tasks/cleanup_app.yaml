@@ -1,0 +1,32 @@
+- name: Clean up orphaned Docker
+  community.docker.docker_compose_v2:
+    project_src: "{{ apps_root ~ '/' ~ app_id ~ '/deploy/compose/' ~ inventory_hostname}}"
+    project_name: "{{ app_id }}"
+    state: absent
+    remove_orphans: true
+    remove_volumes: true
+
+- name: Clean up orphaned calico resources
+  ansible.builtin.shell: |
+    cd /etc/manifests/docker-compose/system/calico && \
+    docker compose run --rm -T calicoctl \
+      delete networkpolicy --selector="app-id=='{{ app_id }}'" --allow-version-mismatch || true && \
+    docker compose run --rm -T calicoctl \
+      delete globalnetworkpolicy --selector="app-id=='{{ app_id }}'" --allow-version-mismatch || true
+  args:
+    executable: /bin/bash
+  ignore_errors: true
+
+- name: Clean up orphaned HostEndpoints
+  ansible.builtin.shell: |
+    cd /etc/manifests/docker-compose/system/calico && \
+    docker compose run --rm -T calicoctl \
+      delete hostendpoint --selector="app-id=='{{ app_id }}'" --allow-version-mismatch || true
+  args:
+    executable: /bin/bash
+  ignore_errors: true
+
+- name: Remove app directory
+  ansible.builtin.file:
+    path: "{{ apps_root ~ '/' ~ app_id }}"
+    state: absent

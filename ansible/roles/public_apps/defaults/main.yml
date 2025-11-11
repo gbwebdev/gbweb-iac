@@ -1,5 +1,3 @@
-calicoctl: /usr/local/bin/calicoctl       # wrapper you installed
 apps_root: /home/ansible/public-apps
 edge_bridge_iface: br-edge_rp
-rendered_dir: /etc/calico/rendered
-sets_dir: /etc/calico/sets
+global_recreate_policy: smart # Put to allways if you need to always recreate when applying change to docker-compose

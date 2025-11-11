@@ -26,22 +26,65 @@ services:
         ipv4_address: 172.20.255.2
     volumes:
       - etcd_data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 15s
+      timeout: 2s
+      retries: 20
 
-  calico-node:
-    image: docker.io/calico/node:v3.27.3
-    network_mode: host            # must program host netfilter/bridges
+  calico-bootstrap:
+    image: docker.io/calico/ctl:v3.27.3
+    networks: [calico_ctrl]
+    environment:
+      DATASTORE_TYPE: etcdv3
+      ETCD_ENDPOINTS: http://etcd:2379
+    command: ["apply","-f","/seed/node.yaml"]
+    volumes:
+      - ./seed:/seed:ro
+    restart: no
+    depends_on:
+      etcd:
+        condition: service_healthy
+
+
+
+  calico-felix:
+    image: quay.io/calico/node:v3.27.3
+    network_mode: host
     restart: unless-stopped
     privileged: true
+    pid: "host"
+    command: ["/bin/calico-node","-felix"]
     environment:
       - DATASTORE_TYPE=etcdv3
-      - ETCD_ENDPOINTS=http://172.20.255.2:2379  # use etcd's static IP
+      - ETCD_ENDPOINTS=http://172.20.255.2:2379
+      - NODENAME={{ inventory_hostname }}
+      - CALICO_NODENAME={{ inventory_hostname }}  # aligns with docs
       - CALICO_NETWORKING_BACKEND=none
+      - NO_DEFAULT_POOLS=true
+      - WAIT_FOR_DATASTORE=true
+      - IP=none
       - FELIX_LOGSEVERITYSCREEN=info
+      - FELIX_IPINIPENABLED=false
+      - FELIX_VXLANENABLED=false
+      - FELIX_WIREGUARDENABLED=false
+      - FELIX_BPFENABLED=false
+      - FELIX_DEFAULTENDPOINTTOHOSTACTION=Return
+      - FELIX_FAILSAFEINBOUNDHOSTPORTS=none
+      - FELIX_FAILSAFEOUTBOUNDHOSTPORTS=none
+      - FELIX_IPTABLESBACKEND=NFT
+      - FELIX_CHAININSERTMODE=Insert
+
     volumes:
       - /var/run/calico:/var/run/calico
       - /lib/modules:/lib/modules:ro
       - /run/xtables.lock:/run/xtables.lock
-    depends_on: [etcd]
+      - /var/lib/calico:/var/lib/calico
+    depends_on:
+      # calico-bootstrap:
+      #   condition: service_completed_successfully
+      etcd:
+        condition: service_healthy
 
   calicoctl:
     image: docker.io/calico/ctl:v3.27.3

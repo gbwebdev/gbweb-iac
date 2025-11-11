@@ -1,3 +1,32 @@
+- name: Create directory for calico config
+  ansible.builtin.file:
+    path: /etc/calico
+    owner: root
+    group: root
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Ensure dirs
+  file: 
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+    owner: ansible
+    group: sysadmin
+  loop: ["{{ rendered_dir }}", "{{ sets_dir }}"]
+  become: true
+
+- name: Install gblobal-network-policy manifests
+  ansible.builtin.copy:
+    src: calico-policies/global-network-policy.yaml
+    dest: "{{ rendered_dir }}/99-global-network-policies.yaml"
+    owner: ansible
+    group: sysadmin
+    mode: '0640'
+    remote_src: no
+  become: true
+
 - name: Create directory for manifests
   ansible.builtin.file:
     path: /etc/manifests
@@ -35,9 +64,28 @@
   become: true
 
 - name: Install the calico docker-compose manifest
-  ansible.builtin.copy:
-    src: docker-compose/calico.yaml
+  ansible.builtin.template:
+    src: docker-compose/calico.yaml.j2
     dest: /etc/manifests/docker-compose/system/calico/docker-compose.yaml
+    owner: root
+    group: sysadmin
+    mode: '0640'
+    remote_src: no
+  become: true
+
+- name: Create directory for calico seeds
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose/system/calico/seed
+    owner: root
+    group: sysadmin
+    mode: '0751'
+    state: directory
+  become: true
+
+- name: Install the calico node seed
+  ansible.builtin.template:
+    src: calico-node-seed.yml.j2
+    dest: /etc/manifests/docker-compose/system/calico/seed/node.yaml
     owner: root
     group: sysadmin
     mode: '0640'
@@ -54,13 +102,53 @@
   become: true
 
 - name: Install the traefik docker-compose manifest
-  ansible.builtin.copy:
-    src: docker-compose/traefik.yaml
+  ansible.builtin.template:
+    src: docker-compose/traefik.yaml.j2
     dest: /etc/manifests/docker-compose/system/traefik/docker-compose.yaml
     owner: root
     group: sysadmin
     mode: '0640'
     remote_src: no
+  become: true
+
+- name: Create directory for certificates
+  ansible.builtin.file:
+    path: /etc/manifests/docker-compose/system/traefik/certs
+    owner: root
+    group: root
+    mode: '0711'
+    state: directory
+  become: true
+
+- name: Create certificate files for each domain
+  ansible.builtin.copy:
+    content: "{{ ssl[item].cert }}"
+    dest: "/etc/manifests/docker-compose/system/traefik/certs/{{ item }}.crt"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: "{{ ssl.keys() | list }}"
+  become: true
+  when: ssl is defined
+
+- name: Create private key files for each domain
+  ansible.builtin.copy:
+    content: "{{ ssl[item].key }}"
+    dest: "/etc/manifests/docker-compose/system/traefik/certs/{{ item }}.key"
+    owner: root
+    group: root
+    mode: '0600'
+  loop: "{{ ssl.keys() | list }}"
+  become: true
+  when: ssl is defined and ssl[item].key is defined
+
+- name: Install the template for traefik tls config
+  ansible.builtin.template:
+    src: traefik-tls.yml.j2
+    dest: /etc/manifests/docker-compose/system/traefik/certs/tls.yml
+    owner: root
+    group: root
+    mode: '0640'
   become: true
 
 - name: Deploy calico
@@ -86,12 +174,30 @@
   become: true
   when: kustomize_check.rc != 0
 
-- name: Copy netpol HEP generator script
+- name: Install netpol HEP generator script
   copy:
     src: docker_netpol_heps.py
     dest: /usr/local/bin/docker_netpol_heps.py
     mode: '0755'
   become: true
+
+- name: Install compose renderer script
+  copy:
+    src: compose_renderer.py
+    dest: /usr/local/bin/compose_renderer.py
+    mode: '0755'
+  become: true
+
+- name: Copy Calico manifest apply helper script
+  copy:
+    src: apply_calico_manifests.sh
+    dest: /usr/local/bin/apply_calico_manifests.sh
+    mode: '0755'
+  become: true
+
+- name: Apply Calico manifests
+  command: /usr/local/bin/apply_calico_manifests.sh "{{ rendered_dir }}"
+  # become: true
 
 - name: Configure Git credential storage
   command: "git config --global credential.helper store"

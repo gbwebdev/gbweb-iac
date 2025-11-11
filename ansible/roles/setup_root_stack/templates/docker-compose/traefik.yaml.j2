@@ -1,10 +1,15 @@
 networks:
   edge_rp:
-    name: edge_rp
+    name: zz_edge_rp
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/24
+    driver_opts:
+      com.docker.network.bridge.name: b.traefik.bck
+    labels:
+      netpol.app: traefik
+      netpol.role: edge
 
 services:
   traefik:

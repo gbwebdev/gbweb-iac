@@ -1,0 +1,108 @@
+# - name: Check for changes in deploy/compose directory
+#   ansible.builtin.shell: |
+#     cd "{{ apps_root ~ '/' ~ id }}"
+#     git diff --name-only HEAD~1 HEAD | grep -E '^deploy/compose/' || true
+#   when: changed
+#   register: compose_changes
+#   changed_when: false
+
+# - name: Clean up orphaned Docker resources
+#   community.docker.docker_compose_v2:
+#     project_src: "{{ apps_root ~ '/' ~ id ~ '/deploy/compose/' ~ inventory_hostname}}"
+#     project_name: "{{ id | default(name) }}"
+#     state: absent
+#     remove_orphans: true
+#     # remove_volumes: true
+#   when: compose_changes is not skipped and compose_changes.stdout != ""
+#   ignore_errors: true
+
+- name: Compose final rendering with labels
+  ansible.builtin.shell: |
+    cd "{{ compose_path }}" && \
+    docker compose config | \
+    compose_renderer.py --labels '{{ labels_json }}' compose.rendered.yml
+  when: changed
+  args:
+    chdir: "{{ compose_path }}"
+  vars:
+    labels_json: >-
+      {{
+        {
+          "app-id": id,
+          "app-name": name,
+          "app-type": type | default("unknown"),
+          "app-ref": ref | default("unknown"),
+          "compose-path": compose_path,
+          "calico-path": calico_path,
+          "last-sync": sync_datetime
+        } | to_json
+      }}
+
+- name: Deploy compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ compose_path  }}"
+    file: compose.rendered.yml
+    remove_orphans: true
+    project_name: "{{ id }}"
+    state: present
+    pull: always
+    recreate: "{{ recreate_policy }}"
+  when: changed
+
+- name: Generate and apply HostEndpoints from Docker networks
+  command: python3 /usr/local/bin/docker_netpol_heps.py {{ inventory_hostname }} --apply --output-dir {{ rendered_dir }}
+  register: hep_result
+  changed_when: "'applied' in hep_result.stdout"
+  # TODO : limit to id
+
+- name: Check for changes in deploy/calico directory
+  ansible.builtin.shell: |
+    cd "{{ apps_root ~ '/' ~ id }}"
+    git diff --name-only HEAD~1 HEAD | grep -E '^deploy/calico/' || true
+  when: changed
+  register: calico_changes
+  changed_when: false
+
+- name: Build calico manifests with kustomize
+  ansible.builtin.shell: |
+    cd "{{ apps_root ~ '/' ~ id ~ '/deploy/calico/' ~ inventory_hostname }}" && \
+    kustomize build .
+  register: kustomize_raw_output
+  changed_when: false
+  when: calico_changes is not skipped and calico_changes.stdout != ""
+
+- name: Add labels to calico manifests
+  ansible.builtin.shell: |
+    echo "{{ kustomize_raw_output.stdout }}" | \
+    yq eval '.metadata |= (. // {}) | .metadata.labels |= (. // {})' - | \
+    yq eval '.metadata.labels."app-id" = "{{ id | default(name) }}"' - | \
+    yq eval '.metadata.labels."last-sync" = "{{ sync_datetime }}"' - | \
+    yq eval '.metadata.labels."app-name" = "{{ name }}"' - | \
+    yq eval '.metadata.labels."app-ref" = "{{ ref | default("unknown") }}"' - | \
+    yq eval '.metadata.labels."compose-path" = "{{ compose_path }}"' - | \
+    yq eval '.metadata.labels."calico-path" = "{{ calico_path }}"' -
+  register: kustomized_output
+  changed_when: false
+  when: calico_changes is not skipped and calico_changes.stdout != "" and kustomize_raw_output is defined
+
+- name: Apply policies with calicoctl (containerized)
+  ansible.builtin.shell: |
+    cd /etc/manifests/docker-compose/system/calico && \
+    echo "{{ kustomized_output.stdout }}" | \
+    docker compose run --rm -T calicoctl \
+      apply -f - --allow-version-mismatch
+  args:
+    executable: /bin/bash
+  when: (calico_changes is not skipped and calico_changes.stdout != "") and (kustomized_output is defined and kustomized_output.stdout != "")
+
+- name: Clean up outdated calico resources
+  ansible.builtin.shell: |
+    cd /etc/manifests/docker-compose/system/calico && \
+    docker compose run --rm -T calicoctl \
+      delete networkpolicy --selector="app-id=='{{ id }}',last-sync!='{{ sync_datetime }}'" --allow-version-mismatch || true && \
+    docker compose run --rm -T calicoctl \
+      delete globalnetworkpolicy --selector="app-id=='{{ id }}',last-sync!='{{ sync_datetime }}'" --allow-version-mismatch || true
+  args:
+    executable: /bin/bash
+  when: (calico_changes is not skipped and calico_changes.stdout != "") and (kustomized_output is defined and kustomized_output.stdout != "")
+  ignore_errors: true

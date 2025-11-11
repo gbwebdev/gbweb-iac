@@ -1,0 +1,38 @@
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: edge-no-lateral
+spec:
+  order: 500
+  selector: "role == 'edge'"
+  applyOnForward: true
+  types: 
+    - Egress
+  egress: 
+    - action: Deny
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: allow-ingress-on-back
+spec:
+  order: 9999
+  selector: role == 'back'
+  applyOnForward: true
+  types: [Ingress]
+  ingress:
+    - action: Allow
+---
+apiVersion: projectcalico.org/v3
+kind: GlobalNetworkPolicy
+metadata:
+  name: default-deny-containers
+spec:
+  order: 10000
+  selector: role in {'egress','back','edge'}
+  applyOnForward: true
+  types: [Ingress, Egress]   # <-- add Ingress
+  ingress:
+    - action: Deny
+  egress:
+    - action: Deny

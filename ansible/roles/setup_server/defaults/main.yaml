@@ -31,8 +31,8 @@ essential_packages:
   - ca-certificates
   - gnupg
   - jq
-  - yq
   - openssl
+ # - yq
 
 # Fail2Ban SSH jail settings
 fail2ban_ssh_maxretry: 3

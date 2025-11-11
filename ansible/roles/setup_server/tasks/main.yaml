@@ -24,6 +24,13 @@
     state: present
   become: true
 
+- name: Install yq (Go-based, by Mike Farah)
+  become: true
+  ansible.builtin.get_url:
+    url: "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64"
+    dest: /usr/local/bin/yq
+    mode: '0755'
+
 - name: Check if /dev/sdb exists
   ansible.builtin.stat:
     path: /dev/sdb
@@ -329,6 +336,28 @@
     enabled: true
   become: true
 
+- name: Enable bridge call to iptables
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-bridge-nf.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+    owner: root
+    group: root
+    mode: 0644
+  become: true
+
+- name: Enable br_netfilter
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+    persistent: present
+  become: true
+
+- name: Apply syscrl config
+  ansible.builtin.shell:
+    cmd: sysctl --system
+  become: true
 
 
 - name: Keyring dir

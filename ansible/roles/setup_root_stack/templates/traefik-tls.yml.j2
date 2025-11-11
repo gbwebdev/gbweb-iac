@@ -1,0 +1,35 @@
+# Cloudflare certificate configuration for Traefik
+# This file defines TLS certificates obtained from Cloudflare
+
+tls:
+  certificates:
+{% for domain in ssl.keys() %}
+    - certFile: /certs/{{ domain }}.crt
+      keyFile: /certs/{{ domain }}.key
+      stores:
+        - default
+{% endfor %}
+
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/gbweb.fr.crt
+        keyFile: /certs/gbweb.fr.key
+
+# Optional: Define TLS options for enhanced security
+
+  options:
+    default:
+      minVersion: VersionTLS12
+      maxVersion: VersionTLS13
+      sniStrict: true             # <- replace sslStrategies
+      cipherSuites:               # TLS 1.2 only
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+      curvePreferences:
+        - CurveP521
+        - CurveP384
+      alpnProtocols:
+        - h2
+        - http/1.1
